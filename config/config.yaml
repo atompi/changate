@@ -1,0 +1,24 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+
+log_level: "info"
+
+apps:
+  - name: "app1"
+    app_id: "${FEISHU_APP_ID_1}"
+    app_secret: "${FEISHU_APP_SECRET_1}"
+    encrypt_key: "${FEISHU_ENCRYPT_KEY_1}"
+    verify_token: "${FEISHU_VERIFY_TOKEN_1}"
+    feishu_base_url: "https://open.feishu.cn"
+
+agent:
+  platform: "hermes"
+  base_url: "http://127.0.0.1:8642"
+  api_path: "/v1/chat/completions"
+  timeout: 3600s
+  model: "hermes-agent"
+  token: "${HERMES_TOKEN}"
+  user: ""
