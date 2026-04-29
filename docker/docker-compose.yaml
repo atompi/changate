@@ -1,0 +1,10 @@
+---
+name: changate
+services:
+  changate:
+    image: atompi/changate:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml
