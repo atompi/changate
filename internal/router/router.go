@@ -13,30 +13,37 @@ import (
 func Setup(cfg *config.Config) *gin.Engine {
 	r := gin.Default()
 
-	var agentClient agent.Client
+	agentClients := make(map[string]agent.Client)
 
-	switch cfg.Agent.Platform {
-	case "openclaw":
-		agentClient = openclaw.NewClient(
-			cfg.Agent.BaseURL,
-			cfg.Agent.APIPath,
-			cfg.Agent.Model,
-			cfg.Agent.Token,
-			cfg.Agent.User,
-			cfg.Agent.Timeout,
-		)
-	default:
-		agentClient = hermes.NewClient(
-			cfg.Agent.BaseURL,
-			cfg.Agent.APIPath,
-			cfg.Agent.Model,
-			cfg.Agent.Token,
-			cfg.Agent.User,
-			cfg.Agent.Timeout,
-		)
+	for i := range cfg.Apps {
+		app := &cfg.Apps[i]
+		var client agent.Client
+
+		switch app.Agent.Platform {
+		case "openclaw":
+			client = openclaw.NewClient(
+				app.Agent.BaseURL,
+				app.Agent.APIPath,
+				app.Agent.Model,
+				app.Agent.Token,
+				app.Agent.User,
+				app.Agent.Timeout,
+			)
+		default:
+			client = hermes.NewClient(
+				app.Agent.BaseURL,
+				app.Agent.APIPath,
+				app.Agent.Model,
+				app.Agent.Token,
+				app.Agent.User,
+				app.Agent.Timeout,
+			)
+		}
+
+		agentClients[app.Name] = client
 	}
 
-	callbackHandler := handler.NewCallbackHandler(cfg.Apps, agentClient, cfg.Agent.Timeout)
+	callbackHandler := handler.NewCallbackHandler(cfg.Apps, agentClients)
 
 	r.GET("/health", callbackHandler.HealthCheck)
 

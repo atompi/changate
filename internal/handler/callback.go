@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/atompi/changate/internal/agent"
 	"github.com/atompi/changate/internal/config"
@@ -22,21 +21,19 @@ import (
 )
 
 type CallbackHandler struct {
-	apps          map[string]*config.AppConfig
-	agentClient   agent.Client
-	agentTimeout  time.Duration
+	apps         map[string]*config.AppConfig
+	agentClients map[string]agent.Client
 }
 
-func NewCallbackHandler(apps []config.AppConfig, agentClient agent.Client, agentTimeout time.Duration) *CallbackHandler {
+func NewCallbackHandler(apps []config.AppConfig, agentClients map[string]agent.Client) *CallbackHandler {
 	appMap := make(map[string]*config.AppConfig)
 	for i := range apps {
 		appMap[apps[i].Name] = &apps[i]
 	}
 
 	return &CallbackHandler{
-		apps:          appMap,
-		agentClient:   agentClient,
-		agentTimeout:  agentTimeout,
+		apps:         appMap,
+		agentClients: agentClients,
 	}
 }
 
@@ -175,14 +172,20 @@ func (h *CallbackHandler) handleMessageEvent(c *gin.Context, app *config.AppConf
 
 	c.JSON(http.StatusOK, gin.H{"code": 0})
 
-	go h.processMessageAsync(app, contentParts, msgEvent.Message.MessageID)
+	go h.processMessageAsync(app.Name, app, contentParts, msgEvent.Message.MessageID)
 }
 
-func (h *CallbackHandler) processMessageAsync(app *config.AppConfig, contentParts interface{}, messageID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), h.agentTimeout)
+func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppConfig, contentParts interface{}, messageID string) {
+	agentClient, ok := h.agentClients[appName]
+	if !ok {
+		logger.Error("agent client not found for app: %s", appName)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), app.Agent.Timeout)
 	defer cancel()
 
-	agentResp, err := h.agentClient.ChatCompletionWithContent(ctx, contentParts)
+	agentResp, err := agentClient.ChatCompletionWithContent(ctx, contentParts)
 	if err != nil {
 		logger.Error("agent API error: %v", err)
 		return

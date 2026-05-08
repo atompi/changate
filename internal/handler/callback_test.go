@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/atompi/changate/internal/agent"
 	"github.com/atompi/changate/internal/config"
 	"github.com/atompi/changate/internal/hermes"
 	"github.com/atompi/changate/internal/model"
@@ -26,7 +27,7 @@ func init() {
 }
 
 func TestHandleCallback_AppNotFound(t *testing.T) {
-	handler := NewCallbackHandler([]config.AppConfig{}, nil, 120)
+	handler := NewCallbackHandler([]config.AppConfig{}, nil)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -43,7 +44,7 @@ func TestHandleCallback_URLVerification(t *testing.T) {
 	apps := []config.AppConfig{
 		{Name: "testapp", VerifyToken: "test-token"},
 	}
-	handler := NewCallbackHandler(apps, nil, 120)
+	handler := NewCallbackHandler(apps, nil)
 
 	body := `{"type":"url_verification","challenge":"test-challenge-123","token":"test-token"}`
 	w := httptest.NewRecorder()
@@ -71,7 +72,7 @@ func TestHandleCallback_TokenMismatch(t *testing.T) {
 	apps := []config.AppConfig{
 		{Name: "testapp", VerifyToken: "correct-token"},
 	}
-	handler := NewCallbackHandler(apps, nil, 120)
+	handler := NewCallbackHandler(apps, nil)
 
 	body := `{"type":"","token":"wrong-token"}`
 	w := httptest.NewRecorder()
@@ -187,8 +188,7 @@ func TestDecryptBody_EmptyEncryptField(t *testing.T) {
 }
 
 func TestHandleMessageEvent_NonMessageEvent(t *testing.T) {
-	hermesClient := hermes.NewClient("http://localhost", "/v1/chat", "test-model", "test-token", "", 120)
-	handler := NewCallbackHandler([]config.AppConfig{}, hermesClient, 120)
+	handler := NewCallbackHandler([]config.AppConfig{}, nil)
 
 	body := []byte(`{"schema":"2.0","header":{"event_type":"im.message.receive_v1"},"event":{"sender":{"sender_id":{}},"message":{"message_id":"msg123","content":"{\"text\":\"hello\"}"}}}`)
 
@@ -211,7 +211,10 @@ func TestNewCallbackHandler(t *testing.T) {
 	}
 
 	hermesClient := hermes.NewClient("http://localhost", "/v1/chat", "test-model", "test-token", "", 120*time.Second)
-	handler := NewCallbackHandler(apps, hermesClient, 120*time.Second)
+	agentClients := map[string]agent.Client{
+		"app1": hermesClient,
+	}
+	handler := NewCallbackHandler(apps, agentClients)
 
 	if handler.apps["app1"] == nil {
 		t.Error("handler.apps['app1'] should not be nil")
@@ -219,10 +222,10 @@ func TestNewCallbackHandler(t *testing.T) {
 	if handler.apps["app2"] == nil {
 		t.Error("handler.apps['app2'] should not be nil")
 	}
-	if handler.agentClient != hermesClient {
-		t.Error("handler.agentClient should be set to hermesClient")
+	if handler.agentClients["app1"] != hermesClient {
+		t.Error("handler.agentClients['app1'] should be set to hermesClient")
 	}
-	if handler.agentTimeout != 120*time.Second {
-		t.Errorf("handler.agentTimeout = %v, want 120s", handler.agentTimeout)
+	if handler.agentClients["app2"] != nil {
+		t.Error("handler.agentClients['app2'] should be nil")
 	}
 }
