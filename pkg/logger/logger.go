@@ -16,21 +16,6 @@ const (
 	ERROR
 )
 
-func (l LogLevel) String() string {
-	switch l {
-	case DEBUG:
-		return "debug"
-	case INFO:
-		return "info"
-	case WARN:
-		return "warn"
-	case ERROR:
-		return "error"
-	default:
-		return "info"
-	}
-}
-
 // ParseLogLevel parses a string to LogLevel
 func ParseLogLevel(s string) LogLevel {
 	switch strings.ToLower(s) {
@@ -83,9 +68,4 @@ func Error(format string, v ...interface{}) {
 	if currentLevel <= ERROR {
 		logger.Printf("[ERROR] "+format, v...)
 	}
-}
-
-// IsDebug returns true if current level is DEBUG
-func IsDebug() bool {
-	return currentLevel == DEBUG
 }

@@ -4,42 +4,33 @@ import (
 	"github.com/atompi/changate/internal/agent"
 	"github.com/atompi/changate/internal/config"
 	"github.com/atompi/changate/internal/handler"
-	"github.com/atompi/changate/internal/hermes"
-	"github.com/atompi/changate/internal/openclaw"
 
 	"github.com/gin-gonic/gin"
 )
 
-func Setup(cfg *config.Config) *gin.Engine {
+type RouterResult struct {
+	Engine *gin.Engine
+	Handler *handler.CallbackHandler
+}
+
+func Setup(cfg *config.Config) *RouterResult {
 	r := gin.Default()
 
 	agentClients := make(map[string]agent.Client)
 
 	for i := range cfg.Apps {
 		app := &cfg.Apps[i]
-		var client agent.Client
-
-		switch app.Agent.Platform {
-		case "openclaw":
-			client = openclaw.NewClient(
-				app.Agent.BaseURL,
-				app.Agent.APIPath,
-				app.Agent.Model,
-				app.Agent.Token,
-				app.Agent.User,
-				app.Agent.Timeout,
-			)
-		default:
-			client = hermes.NewClient(
-				app.Agent.BaseURL,
-				app.Agent.APIPath,
-				app.Agent.Model,
-				app.Agent.Token,
-				app.Agent.User,
-				app.Agent.Timeout,
-			)
-		}
-
+		client := agent.NewClient(
+			app.Agent.BaseURL,
+			app.Agent.APIPath,
+			app.Agent.Model,
+			app.Agent.Token,
+			app.Agent.User,
+			app.Agent.Conversation,
+			app.Agent.Timeout,
+			app.Agent.MaxRetries,
+			app.Agent.RetryBaseDelay,
+		)
 		agentClients[app.Name] = client
 	}
 
@@ -49,5 +40,8 @@ func Setup(cfg *config.Config) *gin.Engine {
 
 	r.POST("/feishu/:appName", callbackHandler.HandleCallback)
 
-	return r
+	return &RouterResult{
+		Engine: r,
+		Handler: callbackHandler,
+	}
 }

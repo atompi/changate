@@ -3,7 +3,7 @@ package model
 
 import (
 	"encoding/json"
-	"strings"
+	"fmt"
 )
 
 // URLVerificationRequest is the request body for URL verification from Feishu.
@@ -78,77 +78,99 @@ type Mention struct {
 
 // TextContent represents a simple text message content.
 type TextContent struct {
+	Type string `json:"type"`
 	Text string `json:"text"`
-}
-
-// ImageContent represents an image message content with optional text.
-type ImageContent struct {
-	Text     string `json:"text,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
 }
 
 // ContentPart represents a content block in a multimodal message.
 type ContentPart struct {
-	Type     string    `json:"type"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *ImageURL `json:"image_url,omitempty"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
 }
 
-// ImageURL represents an image URL with optional detail setting.
-type ImageURL struct {
-	URL    string `json:"url"`
-	Detail string `json:"detail,omitempty"`
-}
+// ParseMessageContent parses message content into content parts based on message type.
+// Supported types: text, image, post
+func ParseMessageContent(content string, messageType string) ([]ContentPart, error) {
+	switch messageType {
+	case "text":
+		var text struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(content), &text); err != nil {
+			return nil, fmt.Errorf("failed to parse text content: %w", err)
+		}
+		if text.Text == "" {
+			return nil, fmt.Errorf("empty text content")
+		}
+		return []ContentPart{{Type: "input_text", Text: text.Text}}, nil
 
-// ParseMessageContent parses the message content string into content parts.
-// It handles both simple text format {"text":"..."} and multimodal format
-// with content parts like [{"type":"text","text":"..."}].
-func ParseMessageContent(content string) ([]ContentPart, error) {
-	var raw json.RawMessage
-	if err := json.Unmarshal([]byte(content), &raw); err != nil {
-		return nil, err
-	}
+	case "image":
+		var img struct {
+			ImageKey string `json:"image_key"`
+		}
+		if err := json.Unmarshal([]byte(content), &img); err != nil {
+			return nil, fmt.Errorf("failed to parse image content: %w", err)
+		}
+		if img.ImageKey == "" {
+			return nil, fmt.Errorf("empty image_key in image message")
+		}
+		return []ContentPart{{
+			Type:     "input_image",
+			ImageURL: img.ImageKey,
+		}}, nil
 
-	var parts []ContentPart
-
-	// Check if it's already an array (multimodal format)
-	if strings.HasPrefix(string(raw), "[") {
-		if err := json.Unmarshal(raw, &parts); err != nil {
-			return nil, err
+	case "post":
+		var richText struct {
+			Content []interface{} `json:"content"`
+		}
+		if err := json.Unmarshal([]byte(content), &richText); err != nil {
+			return nil, fmt.Errorf("failed to parse post content: %w", err)
+		}
+		if len(richText.Content) == 0 {
+			return nil, fmt.Errorf("empty post content")
+		}
+		parts := []ContentPart{}
+		for _, blockIfc := range richText.Content {
+			block, ok := blockIfc.([]interface{})
+			if !ok {
+				continue
+			}
+			for _, itemIfc := range block {
+				item, ok := itemIfc.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				tagVal := item["tag"]
+				tag, ok := tagVal.(string)
+				if !ok {
+					continue
+				}
+				switch tag {
+				case "img":
+					keyVal := item["image_key"]
+					imageKey, ok := keyVal.(string)
+					if ok && imageKey != "" {
+						parts = append(parts, ContentPart{
+							Type:     "input_image",
+							ImageURL: imageKey,
+						})
+					}
+				case "text":
+					textVal := item["text"]
+					text, ok := textVal.(string)
+					if ok && text != "" {
+						parts = append(parts, ContentPart{Type: "input_text", Text: text})
+					}
+				}
+			}
+		}
+		if len(parts) == 0 {
+			return nil, fmt.Errorf("no valid content in post message")
 		}
 		return parts, nil
-	}
 
-	// Try parsing as simple text content
-	var textContent TextContent
-	if err := json.Unmarshal(raw, &textContent); err == nil && textContent.Text != "" {
-		parts = append(parts, ContentPart{
-			Type: "text",
-			Text: textContent.Text,
-		})
-		return parts, nil
+	default:
+		return nil, fmt.Errorf("unsupported message type: %s", messageType)
 	}
-
-	// Try parsing as image content
-	var imageContent ImageContent
-	if err := json.Unmarshal(raw, &imageContent); err == nil {
-		if imageContent.Text != "" {
-			parts = append(parts, ContentPart{
-				Type: "text",
-				Text: imageContent.Text,
-			})
-		}
-		if imageContent.ImageURL != "" {
-			parts = append(parts, ContentPart{
-				Type: "image_url",
-				ImageURL: &ImageURL{
-					URL:    imageContent.ImageURL,
-					Detail: "high",
-				},
-			})
-		}
-		return parts, nil
-	}
-
-	return nil, nil
 }

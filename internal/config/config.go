@@ -9,9 +9,9 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Apps     []AppConfig    `mapstructure:"apps"`
-	LogLevel string         `mapstructure:"log_level"`
+	Server   ServerConfig `mapstructure:"server"`
+	Apps     []AppConfig  `mapstructure:"apps"`
+	LogLevel string       `mapstructure:"log_level"`
 }
 
 type ServerConfig struct {
@@ -22,23 +22,27 @@ type ServerConfig struct {
 }
 
 type AppConfig struct {
-	Name          string        `mapstructure:"name"`
-	AppID         string        `mapstructure:"app_id"`
-	AppSecret     string        `mapstructure:"app_secret"`
-	EncryptKey    string        `mapstructure:"encrypt_key"`
-	VerifyToken   string        `mapstructure:"verify_token"`
-	FeishuBaseURL string        `mapstructure:"feishu_base_url"`
-	Agent         AgentConfig   `mapstructure:"agent"`
+	Name          string      `mapstructure:"name"`
+	AppID         string      `mapstructure:"app_id"`
+	AppSecret     string      `mapstructure:"app_secret"`
+	EncryptKey    string      `mapstructure:"encrypt_key"`
+	VerifyToken   string      `mapstructure:"verify_token"`
+	FeishuBaseURL string      `mapstructure:"feishu_base_url"`
+	Agent         AgentConfig `mapstructure:"agent"`
+	MaxConcurrent int         `mapstructure:"max_concurrent"`
 }
 
 type AgentConfig struct {
-	Platform string        `mapstructure:"platform"`
-	BaseURL  string        `mapstructure:"base_url"`
-	APIPath  string        `mapstructure:"api_path"`
-	Timeout  time.Duration `mapstructure:"timeout"`
-	Model    string        `mapstructure:"model"`
-	Token    string        `mapstructure:"token"`
-	User     string        `mapstructure:"user"`
+	Platform       string        `mapstructure:"platform"`
+	BaseURL        string        `mapstructure:"base_url"`
+	APIPath        string        `mapstructure:"api_path"`
+	Timeout        time.Duration `mapstructure:"timeout"`
+	Model          string        `mapstructure:"model"`
+	Token          string        `mapstructure:"token"`
+	User           string        `mapstructure:"user"`
+	Conversation   string        `mapstructure:"conversation"`
+	MaxRetries     int           `mapstructure:"max_retries"`
+	RetryBaseDelay time.Duration `mapstructure:"retry_base_delay"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -116,6 +120,9 @@ func validateConfig(cfg *Config) error {
 		if app.Name == "" {
 			return fmt.Errorf("app[%d]: name is required", i)
 		}
+		if app.MaxConcurrent == 0 {
+			app.MaxConcurrent = 100
+		}
 		if app.Agent.Platform == "" {
 			app.Agent.Platform = "hermes"
 		}
@@ -123,13 +130,19 @@ func validateConfig(cfg *Config) error {
 			return fmt.Errorf("app[%d].agent.base_url is required", i)
 		}
 		if app.Agent.APIPath == "" {
-			app.Agent.APIPath = "/v1/chat/completions"
+			app.Agent.APIPath = "/v1/responses"
 		}
 		if app.Agent.Timeout == 0 {
 			app.Agent.Timeout = 120 * time.Second
 		}
 		if app.Agent.Model == "" {
 			app.Agent.Model = "hermes-agent"
+		}
+		if app.Agent.MaxRetries == 0 {
+			app.Agent.MaxRetries = 3
+		}
+		if app.Agent.RetryBaseDelay == 0 {
+			app.Agent.RetryBaseDelay = 100 * time.Millisecond
 		}
 	}
 

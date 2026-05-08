@@ -29,11 +29,11 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("Failed to load config: %v", err)
 		}
 
-		r := router.Setup(cfg)
+		result := router.Setup(cfg)
 
 		srv := &http.Server{
 			Addr:         cfg.Server.Address(),
-			Handler:      r,
+			Handler:      result.Engine,
 			ReadTimeout:  cfg.Server.ReadTimeout,
 			WriteTimeout: cfg.Server.WriteTimeout,
 		}
@@ -56,6 +56,9 @@ var serverCmd = &cobra.Command{
 		if err := srv.Shutdown(ctx); err != nil {
 			log.Fatalf("Server forced to shutdown: %v", err)
 		}
+
+		logger.Info("Waiting for in-flight requests...")
+		result.Handler.WaitForCompletion()
 
 		logger.Info("Server exited")
 	},

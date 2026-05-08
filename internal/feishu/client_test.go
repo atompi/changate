@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -34,7 +36,7 @@ func TestReplyMessage_Success(t *testing.T) {
 			t.Errorf("Authorization = %q, want %q", r.Header.Get("Authorization"), "Bearer test_token")
 		}
 
-		var req ReplyMessageReq
+		var req replyMessageReq
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("failed to decode request: %v", err)
 		}
@@ -44,7 +46,7 @@ func TestReplyMessage_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ReplyMessageResp{
+		json.NewEncoder(w).Encode(replyMessageResp{
 			Code: 0,
 			Msg:  "success",
 		})
@@ -63,7 +65,7 @@ func TestReplyMessage_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ReplyMessageResp{
+		json.NewEncoder(w).Encode(replyMessageResp{
 			Code: 10003,
 			Msg:  "invalid parameter",
 		})
@@ -80,7 +82,7 @@ func TestReplyMessage_APIError(t *testing.T) {
 
 func TestSendTextMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req ReplyMessageReq
+		var req replyMessageReq
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("failed to decode request: %v", err)
 		}
@@ -98,7 +100,7 @@ func TestSendTextMessage(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ReplyMessageResp{Code: 0, Msg: "success"})
+		json.NewEncoder(w).Encode(replyMessageResp{Code: 0, Msg: "success"})
 	}))
 	defer server.Close()
 
@@ -116,7 +118,7 @@ func TestGetAppAccessToken_Success(t *testing.T) {
 			t.Errorf("method = %q, want %q", r.Method, http.MethodPost)
 		}
 
-		var req GetAccessTokenReq
+		var req getAccessTokenReq
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("failed to decode request: %v", err)
 		}
@@ -129,7 +131,7 @@ func TestGetAppAccessToken_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(GetAccessTokenResp{
+		json.NewEncoder(w).Encode(getAccessTokenResp{
 			Code:           0,
 			Msg:            "success",
 			AppAccessToken: "test_access_token_12345",
@@ -153,7 +155,7 @@ func TestGetAppAccessToken_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(GetAccessTokenResp{
+		json.NewEncoder(w).Encode(getAccessTokenResp{
 			Code: 99999,
 			Msg:  "internal error",
 		})
@@ -165,5 +167,203 @@ func TestGetAppAccessToken_APIError(t *testing.T) {
 	_, err := client.GetAppAccessToken(context.Background())
 	if err == nil {
 		t.Error("GetAppAccessToken() should return error when API returns error code")
+	}
+}
+
+func TestUploadImage_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want %q", r.Method, http.MethodPost)
+		}
+		if !strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data") {
+			t.Errorf("Content-Type = %q, want multipart/form-data", r.Header.Get("Content-Type"))
+		}
+		if r.Header.Get("Authorization") != "Bearer test_token" {
+			t.Errorf("Authorization = %q, want %q", r.Header.Get("Authorization"), "Bearer test_token")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":0,"msg":"success","data":{"file_key":"file_xxxx"}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("app_id", "app_secret", server.URL)
+
+	imageData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	imageKey, err := client.UploadMessageResource(context.Background(), "test_token", imageData, "test.png", "stream")
+	if err != nil {
+		t.Fatalf("UploadMessageResource() error = %v", err)
+	}
+	if imageKey != "file_xxxx" {
+		t.Errorf("imageKey = %q, want %q", imageKey, "file_xxxx")
+	}
+}
+
+func TestUploadImage_APIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":10003,"msg":"invalid parameter"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("app_id", "app_secret", server.URL)
+
+	_, err := client.UploadMessageResource(context.Background(), "test_token", []byte("fake image data"), "test.png", "stream")
+	if err == nil {
+		t.Error("UploadMessageResource() should return error when API returns error code")
+	}
+}
+
+func TestUploadImage_Non200Status(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := NewClient("app_id", "app_secret", server.URL)
+
+	_, err := client.UploadMessageResource(context.Background(), "test_token", []byte("image"), "test.png", "stream")
+	if err == nil {
+		t.Error("UploadMessageResource() should return error for non-200 status")
+	}
+}
+
+func TestSendFileMessage_Success(t *testing.T) {
+	var uploadCalled bool
+	var replyCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success","tenant_access_token":"test_tenant_token","expire":7200}`))
+		} else if r.URL.Path == "/open-apis/im/v1/files" {
+			uploadCalled = true
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success","data":{"file_key":"file_xxxx"}}`))
+		} else if r.URL.Path == "/open-apis/im/v1/messages/msg123/reply" {
+			replyCalled = true
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success"}`))
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient("app_id", "app_secret", server.URL)
+
+	tmpFile, err := os.CreateTemp("", "test-image-*.png")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Write([]byte("fake image data"))
+	tmpFile.Close()
+
+	err = client.SendFileMessage(context.Background(), "test_token", "msg123", tmpFile.Name())
+	if err != nil {
+		t.Fatalf("SendFileMessage() error = %v", err)
+	}
+	if !uploadCalled {
+		t.Error("UploadMessageResource was not called")
+	}
+	if !replyCalled {
+		t.Error("ReplyMessage was not called")
+	}
+}
+
+func TestSendFileMessage_UploadFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success","tenant_access_token":"test_tenant_token","expire":7200}`))
+		} else if r.URL.Path == "/open-apis/im/v1/files" {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient("app_id", "app_secret", server.URL)
+
+	tmpFile, err := os.CreateTemp("", "test-image-*.png")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Write([]byte("fake image data"))
+	tmpFile.Close()
+
+	err = client.SendFileMessage(context.Background(), "test_token", "msg123", tmpFile.Name())
+	if err == nil {
+		t.Error("SendFileMessage() should return error when upload fails")
+	}
+}
+
+func TestSendFileMessage_FileReadFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success","tenant_access_token":"test_tenant_token","expire":7200}`))
+		} else if r.URL.Path == "/open-apis/im/v1/files" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success","data":{"file_key":"file_xxxx"}}`))
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient("app_id", "app_secret", server.URL)
+
+	err := client.SendFileMessage(context.Background(), "test_token", "msg123", "/nonexistent/path/file.png")
+	if err == nil {
+		t.Error("SendFileMessage() should return error when file read fails")
+	}
+}
+
+func TestSendFileMessage_ReplyFailure(t *testing.T) {
+	uploaded := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success","tenant_access_token":"test_tenant_token","expire":7200}`))
+		} else if r.URL.Path == "/open-apis/im/v1/files" {
+			uploaded = true
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":0,"msg":"success","data":{"file_key":"file_xxxx"}}`))
+		} else if r.URL.Path == "/open-apis/im/v1/messages/msg123/reply" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"code":10003,"msg":"invalid parameter"}`))
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient("app_id", "app_secret", server.URL)
+
+	tmpFile, err := os.CreateTemp("", "test-image-*.png")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Write([]byte("fake image data"))
+	tmpFile.Close()
+
+	err = client.SendFileMessage(context.Background(), "test_token", "msg123", tmpFile.Name())
+	if err == nil {
+		t.Error("SendFileMessage() should return error when reply fails")
+	}
+	if !uploaded {
+		t.Error("UploadMessageResource should have been called before reply failure")
 	}
 }

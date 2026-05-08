@@ -13,14 +13,18 @@ apps:
     encrypt_key: "${FEISHU_ENCRYPT_KEY_1}"
     verify_token: "${FEISHU_VERIFY_TOKEN_1}"
     feishu_base_url: "https://open.feishu.cn"
+    max_concurrent: 100
     agent:
       platform: "hermes"
       base_url: "http://127.0.0.1:8642"
-      api_path: "/v1/chat/completions"
+      api_path: "/v1/responses"
       timeout: 3600s
       model: "hermes-agent"
       token: "${HERMES_TOKEN}"
       user: ""
+      conversation: ""
+      max_retries: 3
+      retry_base_delay: 100ms
 
   - name: "app2"
     app_id: "${FEISHU_APP_ID_2}"
@@ -28,11 +32,15 @@ apps:
     encrypt_key: "${FEISHU_ENCRYPT_KEY_2}"
     verify_token: "${FEISHU_VERIFY_TOKEN_2}"
     feishu_base_url: "https://open.feishu.cn"
+    max_concurrent: 100
     agent:
       platform: "openclaw"
       base_url: "http://127.0.0.1:18789"
-      api_path: "/v1/chat/completions"
+      api_path: "/v1/responses"
       timeout: 3600s
       model: "openclaw/default"
       token: "${OPENCLAW_TOKEN}"
       user: "user@example.com"
+      conversation: ""
+      max_retries: 3
+      retry_base_delay: 100ms

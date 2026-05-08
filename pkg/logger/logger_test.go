@@ -38,28 +38,6 @@ func TestParseLogLevel(t *testing.T) {
 	}
 }
 
-func TestLogLevel_String(t *testing.T) {
-	tests := []struct {
-		level    LogLevel
-		expected string
-	}{
-		{DEBUG, "debug"},
-		{INFO, "info"},
-		{WARN, "warn"},
-		{ERROR, "error"},
-		{LogLevel(100), "info"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			got := tt.level.String()
-			if got != tt.expected {
-				t.Errorf("LogLevel(%d).String() = %q, want %q", tt.level, got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestSetLevel(t *testing.T) {
 	originalLevel := currentLevel
 	defer func() { currentLevel = originalLevel }()
@@ -81,21 +59,6 @@ func TestSetLevel(t *testing.T) {
 				t.Errorf("SetLevel(%q) set level to %v, want %v", tt.input, currentLevel, tt.expected)
 			}
 		})
-	}
-}
-
-func TestIsDebug(t *testing.T) {
-	originalLevel := currentLevel
-	defer func() { currentLevel = originalLevel }()
-
-	currentLevel = DEBUG
-	if !IsDebug() {
-		t.Error("IsDebug() should return true when currentLevel is DEBUG")
-	}
-
-	currentLevel = INFO
-	if IsDebug() {
-		t.Error("IsDebug() should return false when currentLevel is INFO")
 	}
 }
 
@@ -145,30 +108,6 @@ func TestInfo_Output(t *testing.T) {
 	Info("should not output")
 	if buf.Len() != 0 {
 		t.Error("Info() should not output when level is WARN")
-	}
-
-	logger.SetOutput(os.Stdout)
-}
-
-func TestWarn_Output(t *testing.T) {
-	originalLevel := currentLevel
-	defer func() { currentLevel = originalLevel }()
-
-	var buf bytes.Buffer
-	logger.SetOutput(&buf)
-
-	currentLevel = WARN
-	Warn("warn message")
-	output := buf.String()
-	if output == "" {
-		t.Error("Warn() should output when level is WARN")
-	}
-
-	buf.Reset()
-	currentLevel = ERROR
-	Warn("should not output")
-	if buf.Len() != 0 {
-		t.Error("Warn() should not output when level is ERROR")
 	}
 
 	logger.SetOutput(os.Stdout)

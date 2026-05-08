@@ -6,14 +6,15 @@ Channel Gateway for Feishu and AI Agents.
 
 Changate is a gateway that connects Feishu (Lark) applications with AI Agent services. It receives message callbacks from Feishu apps, forwards messages to backend AI Agents (supporting Hermes and OpenClaw), and sends the Agent's response back to Feishu.
 
-```
-┌─────────────┐   Message Callback   ┌─────────────┐   API Call   ┌─────────────┐
-│   Feishu    │ ──────────────────► │  Changate   │ ───────────► │  Hermes /   │
-│   App       │                     │   Gateway   │              │  OpenClaw   │
-└─────────────┘                     └─────────────┘              └─────────────┘
-                                       │                            │
-                                       │     Response Forward       │
-                                       ◄─────────────────────────────
+```mermaid
+flowchart LR
+    A["Feishu/<br/>Lark"]
+    B["Changate"]
+	C["AI engine"]
+    A -->|POST /feishu/app1| B
+    B -->|response| A
+	B -->|async<br/>POST /v1/responses| C
+	C -->|response| B
 ```
 
 ## Features
@@ -25,6 +26,8 @@ Changate is a gateway that connects Feishu (Lark) applications with AI Agent ser
 - **Async Processing**: Agent requests are processed asynchronously to avoid Feishu callback timeout
 - **Session Persistence**: Configure `user` parameter for stable Agent sessions
 - **Flexible Configuration**: Environment variable injection for sensitive configs
+- **Image Processing**: Download images from Feishu messages, base64 encode and send to Agent
+- **File Response**: Support Agent returning local file paths, upload to Feishu for sending
 
 ## Tech Stack
 
@@ -44,7 +47,7 @@ changate/
 │   └── config.yaml           # Configuration file
 ├── internal/
 │   ├── agent/
-│   │   └── agent.go          # Agent interface definition
+│   │   └── responses.go     # Agent client implementation
 │   ├── config/
 │   │   └── config.go         # Configuration loader
 │   ├── feishu/
@@ -52,20 +55,18 @@ changate/
 │   ├── handler/
 │   │   ├── callback.go       # Callback handling logic
 │   │   └── health.go         # Health check endpoint
-│   ├── hermes/
-│   │   └── client.go         # Hermes Agent client
 │   ├── model/
-│   │   ├── event.go          # Event data models
-│   │   └── hermes.go         # Hermes response models
-│   ├── openclaw/
-│   │   └── client.go         # OpenClaw Agent client
+│   │   ├── agent.go         # Agent response models
+│   │   └── event.go         # Event data models
 │   └── router/
 │       └── router.go         # Route setup
 └── pkg/
     ├── crypto/
     │   └── aes.go            # AES encryption utilities
-    └── logger/
-        └── logger.go         # Logging utilities
+    ├── logger/
+    │   └── logger.go         # Logging utilities
+    └── retry/
+        └── retry.go           # Retry utilities
 ```
 
 ## Quick Start
@@ -111,11 +112,11 @@ apps:
 agent:
   platform: "hermes"           # Options: "hermes" or "openclaw"
   base_url: "http://127.0.0.1:8642"
-  api_path: "/v1/chat/completions"
+  api_path: "/v1/responses"
   timeout: 3600s
   model: "hermes-agent"
   token: "${HERMES_TOKEN}"
-  user: ""                     # User identifier for session persistence
+  user: ""                    # User identifier for session persistence
 ```
 
 #### Configuration Reference
@@ -182,7 +183,7 @@ Receives message callbacks from Feishu apps.
 
 **Request Headers**:
 - `X-Lark-Signature`: HMAC-SHA256 signature
-- `X-Lark-Timestamp`: Timestamp
+- `X-Lark-Request-Timestamp`: Timestamp
 
 **Request Body**:
 ```json
@@ -240,13 +241,33 @@ Returns service health status.
 
 ## Message Processing Flow
 
+### Text Messages
+
 1. **Receive Callback**: Changate receives Feishu callback request
 2. **Decrypt & Verify**: If encryption key is configured, decrypt request body and verify signature
 3. **Parse Message**: Parse event type, extract message content and message ID
 4. **Async Processing**:
-   - Send message content to Agent
+   - Serialize text content to Agent API format
    - After Agent returns response, send text reply to Feishu user
 5. **Immediate Response**: Return `{"code": 0}` immediately after receiving callback to avoid timeout
+
+### Image Messages
+
+1. **Receive Callback**: Receive message with `message_type: "image"`
+2. **Parse Image**: Extract `image_key`
+3. **Download Image**: Call Feishu message resource download API `GET /open-apis/im/v1/messages/{message_id}/resources/{file_key}?type=image`
+4. **Base64 Encode**: Encode image data as `data:image/png;base64,...` format
+5. **Send to Agent**: Serialize as `{"type": "input_image", "image_url": "data:image/png;base64,..."}`
+6. **Process Response**: Agent may return text or local file path
+
+### File Response
+
+When Agent response contains text in `MEDIA:/path/to/file.png` format:
+
+1. Extract file path
+2. Read local file
+3. Upload to Feishu: `POST /open-apis/im/v1/files` (multipart/form-data)
+4. Send file message to Feishu user
 
 ## Security
 
@@ -264,7 +285,7 @@ Changate uses AES-256-CBC for decryption. Configure `encrypt_key` to enable.
 
 ### Signature Verification
 
-Feishu callbacks carry `X-Lark-Signature` and `X-Lark-Timestamp` headers. Changate verifies using HMAC-SHA256:
+Feishu callbacks carry `X-Lark-Signature` and `X-Lark-Request-Timestamp` headers. Changate verifies using HMAC-SHA256:
 
 ```
 signature = HMAC-SHA256(encryptKey, timestamp + body)
@@ -278,12 +299,12 @@ If `verify_token` is configured, Changate verifies the `token` field in the requ
 
 ### Hermes Agent
 
-Request format (OpenAI ChatCompletions compatible):
+Request format (using `/v1/responses` API):
 
 ```json
 {
   "model": "hermes-agent",
-  "messages": [
+  "input": [
     {"role": "user", "content": "User message"}
   ],
   "user": "user-identifier",
@@ -293,12 +314,12 @@ Request format (OpenAI ChatCompletions compatible):
 
 ### OpenClaw Gateway
 
-Request format:
+Request format (using `/v1/responses` API):
 
 ```json
 {
   "model": "openclaw/default",
-  "messages": [
+  "input": [
     {"role": "user", "content": [{"type": "text", "text": "User message"}]}
   ],
   "user": "user-identifier",
@@ -306,7 +327,30 @@ Request format:
 }
 ```
 
-OpenClaw supports content parts format for multimodal content.
+OpenClaw supports content parts format and multimodal content (text + images).
+
+### Agent Image Format
+
+Image format sent to Agent:
+
+```json
+{
+  "role": "user",
+  "content": [
+    {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KG..."}
+  ]
+}
+```
+
+### Agent File Path Response
+
+When Agent returns text containing `MEDIA:` prefix, system extracts file path:
+
+```
+MEDIA:/opt/data/cache/screenshots/browser_screenshot_xxx.png
+```
+
+System will read the file and upload to Feishu.
 
 ## Logging
 
