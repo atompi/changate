@@ -27,29 +27,28 @@ import (
 type CallbackHandler struct {
 	apps         map[string]*config.AppConfig
 	agentClients map[string]agent.Client
-	semaphore    chan struct{}
+	semaphores   map[string]chan struct{}
 	active       atomic.Int64
 }
 
 func NewCallbackHandler(apps []config.AppConfig, agentClients map[string]agent.Client) *CallbackHandler {
 	appMap := make(map[string]*config.AppConfig)
+	semaphores := make(map[string]chan struct{})
 	for i := range apps {
 		app := apps[i]
 		appMap[app.Name] = &app
-	}
 
-	maxConcurrent := 100
-	if len(apps) > 0 {
-		maxConcurrent = apps[0].MaxConcurrent
+		maxConcurrent := app.MaxConcurrent
 		if maxConcurrent <= 0 {
 			maxConcurrent = 100
 		}
+		semaphores[app.Name] = make(chan struct{}, maxConcurrent)
 	}
 
 	return &CallbackHandler{
 		apps:         appMap,
 		agentClients: agentClients,
-		semaphore:    make(chan struct{}, maxConcurrent),
+		semaphores:   semaphores,
 	}
 }
 
@@ -210,11 +209,12 @@ func (h *CallbackHandler) handleMessageEvent(c *gin.Context, app *config.AppConf
 
 func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppConfig, contentParts []model.ContentPart, messageID string) {
 	h.active.Add(1)
-	h.semaphore <- struct{}{}
+	semaphore := h.semaphores[appName]
+	semaphore <- struct{}{}
 	go func() {
 		defer func() {
 			h.active.Add(-1)
-			<-h.semaphore
+			<-semaphore
 		}()
 
 		agentClient, ok := h.agentClients[appName]

@@ -20,7 +20,7 @@ flowchart LR
 ## Features
 
 - **Multi-App Support**: Handle multiple Feishu apps via URL paths (e.g., `/feishu/app1`, `/feishu/app2`)
-- **Multi-Agent Support**: Support for Hermes and OpenClaw platforms, switchable via configuration
+- **Multi-Agent Support**: Support for Hermes and OpenClaw agents via model configuration
 - **Message Encryption**: AES-256-CBC encrypted callback content support
 - **Signature Verification**: HMAC-SHA256 signature verification for request legitimacy
 - **Async Processing**: Agent requests are processed asynchronously to avoid Feishu callback timeout
@@ -110,7 +110,6 @@ apps:
     feishu_base_url: "https://open.feishu.cn"
 
 agent:
-  platform: "hermes"           # Options: "hermes" or "openclaw"
   base_url: "http://127.0.0.1:8642"
   api_path: "/v1/responses"
   timeout: 3600s
@@ -133,7 +132,6 @@ agent:
 - `feishu_base_url`: Feishu open platform address
 
 **Agent Config**:
-- `platform`: Agent platform type (`hermes` or `openclaw`)
 - `base_url`: Agent API address
 - `api_path`: API path
 - `timeout`: Request timeout

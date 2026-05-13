@@ -74,7 +74,6 @@ func TestSetup_OneAppConfigured(t *testing.T) {
 			VerifyToken:   "test_verify_token",
 			FeishuBaseURL: "https://open.feishu.cn",
 			Agent: config.AgentConfig{
-				Platform: "hermes",
 				BaseURL:  "http://127.0.0.1:8642",
 				APIPath:  "/v1/chat/completions",
 				Timeout:  120 * time.Second,
@@ -123,7 +122,6 @@ func TestSetup_RoutesRegisteredCorrectly(t *testing.T) {
 			AppSecret:    "secret1",
 			FeishuBaseURL: "https://open.feishu.cn",
 			Agent: config.AgentConfig{
-				Platform: "hermes",
 				BaseURL:  "http://localhost:8642",
 				APIPath:  "/v1/responses",
 				Timeout:  120 * time.Second,
@@ -161,7 +159,6 @@ func TestSetup_AgentClientsCreated(t *testing.T) {
 			AppSecret:    "secret1",
 			FeishuBaseURL: "https://open.feishu.cn",
 			Agent: config.AgentConfig{
-				Platform: "hermes",
 				BaseURL:  "http://127.0.0.1:8642",
 				APIPath:  "/v1/responses",
 				Timeout:  120 * time.Second,
@@ -176,7 +173,6 @@ func TestSetup_AgentClientsCreated(t *testing.T) {
 			AppSecret:    "secret2",
 			FeishuBaseURL: "https://open.feishu.cn",
 			Agent: config.AgentConfig{
-				Platform: "openclaw",
 				BaseURL:  "http://127.0.0.1:8080",
 				APIPath:  "/v1/responses",
 				Timeout:  120 * time.Second,

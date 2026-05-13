@@ -20,7 +20,7 @@ flowchart LR
 ## 功能特性
 
 - **多应用支持**：通过 URL 路径（如 `/feishu/app1`、`/feishu/app2`）区分多个飞书应用
-- **多 Agent 支持**：支持 Hermes 和 OpenClaw 两种 Agent 平台，可通过配置切换
+- **多 Agent 支持**：支持通过 model 配置选择 Hermes 或 OpenClaw Agent
 - **消息加密**：支持 AES-256-CBC 加密回调内容
 - **签名验证**：支持 HMAC-SHA256 签名验证请求合法性
 - **异步处理**：Agent 请求异步执行，避免飞书回调超时
@@ -110,7 +110,6 @@ apps:
     feishu_base_url: "https://open.feishu.cn"
 
 agent:
-  platform: "hermes"           # 可选: "hermes" 或 "openclaw"
   base_url: "http://127.0.0.1:8642"
   api_path: "/v1/responses"
   timeout: 3600s
@@ -133,7 +132,6 @@ agent:
 - `feishu_base_url`：飞书开放平台地址
 
 **Agent 配置**：
-- `platform`：Agent 平台类型 (`hermes` 或 `openclaw`)
 - `base_url`：Agent API 地址
 - `api_path`：API 路径
 - `timeout`：请求超时时间

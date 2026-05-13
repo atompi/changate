@@ -33,7 +33,6 @@ type AppConfig struct {
 }
 
 type AgentConfig struct {
-	Platform       string        `mapstructure:"platform"`
 	BaseURL        string        `mapstructure:"base_url"`
 	APIPath        string        `mapstructure:"api_path"`
 	Timeout        time.Duration `mapstructure:"timeout"`
@@ -122,9 +121,6 @@ func validateConfig(cfg *Config) error {
 		}
 		if app.MaxConcurrent == 0 {
 			app.MaxConcurrent = 100
-		}
-		if app.Agent.Platform == "" {
-			app.Agent.Platform = "hermes"
 		}
 		if app.Agent.BaseURL == "" {
 			return fmt.Errorf("app[%d].agent.base_url is required", i)
