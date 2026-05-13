@@ -1,48 +1,11 @@
 package model
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
-// GetContent extracts text content from a ResponsesResponse.
-// It handles both plain text and content parts formats.
-func (r *ResponsesResponse) GetContent() string {
-	if len(r.Output) == 0 {
-		return ""
-	}
-
-	var replyText string
-	for _, output := range r.Output {
-		if output.Type == "message" && output.Role == "assistant" {
-			for _, part := range output.Content {
-				replyText += part.Text
-			}
-		}
-	}
-
-	return replyText
-}
-
-// GetFilePath extracts a file path from the response content.
-// If the content contains "MEDIA:/opt/data/cache/screenshots/browser_screenshot_xxx.png",
-// it extracts and returns that file path. Otherwise returns empty string.
-func (r *ResponsesResponse) GetFilePath() string {
-	replyText := r.GetContent()
-	if replyText == "" {
-		return ""
-	}
-	const mediaPrefix = "MEDIA:"
-	if strings.Contains(replyText, mediaPrefix) {
-		idx := strings.Index(replyText, mediaPrefix)
-		pathStart := idx + len(mediaPrefix)
-		pathEnd := strings.Index(replyText[pathStart:], "\n")
-		if pathEnd == -1 {
-			pathEnd = len(replyText)
-		} else {
-			pathEnd += pathStart
-		}
-		return replyText[pathStart:pathEnd]
-	}
-	return ""
-}
+type ResponsesResponse = OpenResponsesResponse
 
 type Message struct {
 	Role    string `json:"role"`
@@ -54,7 +17,13 @@ type Content struct {
 	Text string `json:"text"`
 }
 
-type ResponsesResponse struct {
+type ContentPart struct {
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
+}
+
+type OpenResponsesResponse struct {
 	ID              string   `json:"id"`
 	Object          string   `json:"object"`
 	Status          string   `json:"status"`
@@ -75,8 +44,97 @@ type Output struct {
 	Content   []Content `json:"content"`
 }
 
+type Choice struct {
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string  `json:"finish_reason"`
+}
+
+type ChatCompletionsResponse struct {
+	ID              string   `json:"id"`
+	Object          string   `json:"object"`
+	Created         int64    `json:"created"`
+	Model           string   `json:"model"`
+	Choices         []Choice `json:"choices"`
+	Usage           Usage    `json:"usage"`
+	MaxOutputTokens int      `json:"max_output_tokens"`
+}
+
 type Usage struct {
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
 	TotalTokens  int `json:"total_tokens"`
+}
+
+func (r *OpenResponsesResponse) GetContent() string {
+	if len(r.Output) == 0 {
+		return ""
+	}
+
+	var replyText strings.Builder
+	for _, output := range r.Output {
+		if output.Type == "message" && output.Role == "assistant" {
+			for _, part := range output.Content {
+				replyText.WriteString(part.Text)
+			}
+		}
+	}
+
+	return replyText.String()
+}
+
+func (r *OpenResponsesResponse) GetFilePath() string {
+	replyText := r.GetContent()
+	if replyText == "" {
+		return ""
+	}
+	const mediaPrefix = "MEDIA:"
+	if strings.Contains(replyText, mediaPrefix) {
+		idx := strings.Index(replyText, mediaPrefix)
+		pathStart := idx + len(mediaPrefix)
+		pathEnd := strings.IndexFunc(replyText[pathStart:], unicode.IsSpace)
+		if pathEnd == -1 {
+			pathEnd = len(replyText)
+		} else {
+			pathEnd += pathStart
+		}
+		return replyText[pathStart:pathEnd]
+	}
+	return ""
+}
+
+func (r *ChatCompletionsResponse) GetContent() string {
+	if len(r.Choices) == 0 {
+		return ""
+	}
+	var replyText strings.Builder
+	for _, choice := range r.Choices {
+		if choice.Message.Role == "assistant" {
+			if text, ok := choice.Message.Content.(string); ok {
+				replyText.WriteString("\n")
+				replyText.WriteString(text)
+			}
+		}
+	}
+	return replyText.String()
+}
+
+func (r *ChatCompletionsResponse) GetFilePath() string {
+	replyText := r.GetContent()
+	if replyText == "" {
+		return ""
+	}
+	const mediaPrefix = "MEDIA:"
+	if strings.Contains(replyText, mediaPrefix) {
+		idx := strings.Index(replyText, mediaPrefix)
+		pathStart := idx + len(mediaPrefix)
+		pathEnd := strings.Index(replyText[pathStart:], "\n")
+		if pathEnd == -1 {
+			pathEnd = len(replyText)
+		} else {
+			pathEnd += pathStart
+		}
+		return replyText[pathStart:pathEnd]
+	}
+	return ""
 }

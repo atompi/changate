@@ -7,8 +7,8 @@ import (
 )
 
 type Config struct {
-	MaxRetries   int
-	BaseDelay    time.Duration
+	MaxRetries  int
+	BaseDelay   time.Duration
 	BeforeRetry func(attempt int, delay time.Duration)
 }
 

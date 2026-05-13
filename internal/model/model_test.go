@@ -34,8 +34,8 @@ func TestResponsesResponse_GetContent_StringContent(t *testing.T) {
 	resp := &ResponsesResponse{
 		Output: []Output{
 			{
-				Type:   "message",
-				Role:   "assistant",
+				Type: "message",
+				Role: "assistant",
 				Content: []Content{
 					{Type: "text", Text: "simple string response"},
 				},
@@ -64,8 +64,8 @@ func TestResponsesResponse_GetFilePath_WithMediaPrefix(t *testing.T) {
 	resp := &ResponsesResponse{
 		Output: []Output{
 			{
-				Type:   "message",
-				Role:   "assistant",
+				Type: "message",
+				Role: "assistant",
 				Content: []Content{
 					{Type: "text", Text: "MEDIA:/opt/data/cache/screenshots/browser_screenshot_8dacf3bc0000409baf524ca3110e170d.png\n"},
 				},
@@ -83,8 +83,8 @@ func TestResponsesResponse_GetFilePath_WithoutMediaPrefix(t *testing.T) {
 	resp := &ResponsesResponse{
 		Output: []Output{
 			{
-				Type:   "message",
-				Role:   "assistant",
+				Type: "message",
+				Role: "assistant",
 				Content: []Content{
 					{Type: "text", Text: "https://example.com/image.png"},
 				},

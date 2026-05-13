@@ -19,15 +19,15 @@ flowchart LR
 
 ## 功能特性
 
-- **多应用支持**：通过 URL 路径（如 `/feishu/app1`、`/feishu/app2`）区分多个飞书应用
+- **ETCD 配置管理**：通过 ETCD 集中管理多 app 配置，支持 per-user agent 覆盖
 - **多 Agent 支持**：支持通过 model 配置选择 Hermes 或 OpenClaw Agent
 - **消息加密**：支持 AES-256-CBC 加密回调内容
 - **签名验证**：支持 HMAC-SHA256 签名验证请求合法性
 - **异步处理**：Agent 请求异步执行，避免飞书回调超时
 - **会话保持**：支持配置 `user` 参数实现稳定的 Agent 会话
-- **灵活配置**：支持环境变量注入敏感配置
 - **图片处理**：支持下载飞书消息中的图片，base64 编码后发送给 Agent
 - **文件回复**：支持 Agent 返回本地文件路径，上传至飞书发送
+- **Agent 客户端缓存**：LRU+TTL 缓存减少重复创建开销
 
 ## 技术栈
 
@@ -49,12 +49,15 @@ changate/
 │   ├── agent/
 │   │   └── responses.go     # Agent 客户端实现
 │   ├── config/
-│   │   └── config.go        # 配置加载
+│   │   ├── config.go        # 配置加载
+│   │   └── etcd_loader.go  # ETCD 配置加载器
+│   ├── etcd/
+│   │   └── client.go       # ETCD 客户端
 │   ├── feishu/
 │   │   └── client.go        # 飞书 API 客户端
 │   ├── handler/
 │   │   ├── callback.go      # 回调处理逻辑
-│   │   └── health.go        # 健康检查
+│   │   └── agent_cache.go   # Agent 客户端缓存
 │   ├── model/
 │   │   ├── agent.go         # Agent 响应模型
 │   │   └── event.go         # 事件数据模型
@@ -101,21 +104,13 @@ server:
 
 log_level: "info"
 
-apps:
-  - name: "app1"
-    app_id: "${FEISHU_APP_ID_1}"
-    app_secret: "${FEISHU_APP_SECRET_1}"
-    encrypt_key: "${FEISHU_ENCRYPT_KEY_1}"
-    verify_token: "${FEISHU_VERIFY_TOKEN_1}"
-    feishu_base_url: "https://open.feishu.cn"
-
-agent:
-  base_url: "http://127.0.0.1:8642"
-  api_path: "/v1/responses"
-  timeout: 3600s
-  model: "hermes-agent"
-  token: "${HERMES_TOKEN}"
-  user: ""                    # 用于会话保持的 user 标识
+etcd:
+  endpoints:
+    - "http://127.0.0.1:23790"
+    - "http://127.0.0.1:23791"
+    - "http://127.0.0.1:23792"
+  timeout: 5s
+  root_path: "/changate"
 ```
 
 #### 配置说明
@@ -124,31 +119,54 @@ agent:
 - `host` / `port`：服务监听地址
 - `read_timeout` / `write_timeout`：HTTP 超时时间
 
-**Apps 配置**（支持多个飞书应用）：
-- `name`：应用标识，用于 URL 路径匹配
-- `app_id` / `app_secret`：飞书应用凭证
-- `encrypt_key`：AES-256-CBC 加密密钥（可选）
-- `verify_token`：飞书回调验证 Token（可选）
-- `feishu_base_url`：飞书开放平台地址
+**ETCD 配置**：
+- `endpoints`：ETCD 集群节点地址列表
+- `timeout`：ETCD 操作超时时间
+- `root_path`：配置根路径（默认 `/changate`）
 
-**Agent 配置**：
-- `base_url`：Agent API 地址
-- `api_path`：API 路径
-- `timeout`：请求超时时间
-- `model`：模型名称
-- `token`：认证 Token
-- `user`：用户标识，用于会话保持（可选）
+#### ETCD 配置结构
 
-#### 环境变量
+配置存储在 ETCD 中，路径结构如下：
 
-敏感配置支持环境变量注入，格式为 `${ENV_VAR_NAME}`：
+| 路径 | 说明 |
+|------|------|
+| `/changate/<app_name>` | App 级配置（enabled + default agent） |
+| `/changate/<app_name>/<user_id>` | User 级配置（enabled + agent 覆盖） |
 
-```bash
-export FEISHU_APP_ID_1="cli_xxx"
-export FEISHU_APP_SECRET_1="xxx"
-export FEISHU_ENCRYPT_KEY_1="32位密钥"
-export FEISHU_VERIFY_TOKEN_1="xxx"
-export HERMES_TOKEN="xxx"
+**App 配置示例**：
+```json
+{
+  "enabled": true,
+  "app_id": "cli_xxxxxxxx",
+  "app_secret": "xxxxxxxx",
+  "encrypt_key": "xxxxxxxx",
+  "verify_token": "xxxxxxxx",
+  "feishu_base_url": "https://open.feishu.cn",
+  "max_concurrent": 100,
+  "agent": {
+    "type": "ChatCompletions",    // ChatCompletions or OpenResponses
+    "base_url": "http://127.0.0.1:8642",
+    "api_path": "/v1/responses",
+    "timeout": 3600,
+    "model": "hermes-agent",
+    "token": "xxxxxxxx",
+    "user": "default"
+  }
+}
+```
+
+**User 配置示例**：
+```json
+{
+  "enabled": true,
+  "agent": {
+    "type": "ChatCompletions",    // ChatCompletions or OpenResponses
+    "base_url": "http://127.0.0.1:18789",
+    "model": "openclaw/default",
+    "token": "xxxxxxxx",
+    "user": "bob"
+  }
+}
 ```
 
 ### 运行

@@ -58,8 +58,8 @@ func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
 		return nil, errors.New("invalid padding length")
 	}
 
-	for i := 0; i < padLen; i++ {
-		if data[len(data)-1-i] != byte(padLen) {
+	for idx := 0; idx < padLen; idx++ {
+		if data[len(data)-1-idx] != byte(padLen) {
 			return nil, errors.New("invalid padding content")
 		}
 	}

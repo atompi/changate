@@ -14,15 +14,14 @@ import (
 	"github.com/atompi/changate/pkg/retry"
 )
 
-type responsesRequest struct {
-	Model        string          `json:"model"`
-	Input        []model.Message `json:"input"`
-	User         string          `json:"user,omitempty"`
-	Conversation string          `json:"conversation,omitempty"`
-	Stream       bool            `json:"stream"`
+type chatCompletionsRequest struct {
+	Model    string          `json:"model"`
+	Messages []model.Message `json:"messages"`
+	User     string          `json:"user,omitempty"`
+	Stream   bool            `json:"stream"`
 }
 
-type responsesClient struct {
+type chatCompletionsClient struct {
 	baseURL        string
 	apiPath        string
 	timeout        time.Duration
@@ -35,14 +34,14 @@ type responsesClient struct {
 	httpClient     *http.Client
 }
 
-func NewOpenResponsesClient(baseURL, apiPath, model, token, user, conversation string, timeout time.Duration, maxRetries int, retryBaseDelay time.Duration) *responsesClient {
+func NewChatCompletionsClient(baseURL, apiPath, model, token, user, conversation string, timeout time.Duration, maxRetries int, retryBaseDelay time.Duration) *chatCompletionsClient {
 	if apiPath == "" {
-		apiPath = "/v1/responses"
+		apiPath = "/v1/chat/completions"
 	}
 	if timeout == 0 {
 		timeout = 120 * time.Second
 	}
-	return &responsesClient{
+	return &chatCompletionsClient{
 		baseURL:        baseURL,
 		apiPath:        apiPath,
 		timeout:        timeout,
@@ -58,22 +57,21 @@ func NewOpenResponsesClient(baseURL, apiPath, model, token, user, conversation s
 	}
 }
 
-func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Message) (*model.OpenResponsesResponse, error) {
+func (c *chatCompletionsClient) ChatCompletions(ctx context.Context, messages []model.Message) (*model.ChatCompletionsResponse, error) {
 	url := fmt.Sprintf("%s%s", c.baseURL, c.apiPath)
 
-	reqBody := responsesRequest{
-		Model:        c.model,
-		Input:        messages,
-		User:         c.user,
-		Conversation: c.conversation,
-		Stream:       false,
+	reqBody := chatCompletionsRequest{
+		Model:    c.model,
+		Messages: messages,
+		User:     c.user,
+		Stream:   false,
 	}
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	var respData model.OpenResponsesResponse
+	var respData model.ChatCompletionsResponse
 
 	err = retry.Do(ctx, retry.Config{
 		MaxRetries: c.maxRetries,
@@ -124,30 +122,30 @@ func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Me
 		return nil, err
 	}
 
-	rawOutput, _ := json.Marshal(respData.Output)
+	rawOutput, _ := json.Marshal(respData.Choices)
 	logger.Debug("[agent response] raw_body=%s", string(rawOutput))
 
 	return &respData, nil
 }
 
-func (c *responsesClient) OpenResponsesWithContent(ctx context.Context, contentParts []model.OpenResponsesContentPart) (*model.OpenResponsesResponse, error) {
-	reqInput := model.Message{
+func (c *chatCompletionsClient) ChatCompletionsWithContent(ctx context.Context, contentParts []model.ChatCompletionsContentPart) (*model.ChatCompletionsResponse, error) {
+	reqMessage := model.Message{
 		Role:    "user",
 		Content: contentParts,
 	}
 
-	messages := []model.Message{reqInput}
-	return c.OpenResponses(ctx, messages)
+	messages := []model.Message{reqMessage}
+	return c.ChatCompletions(ctx, messages)
 }
 
-func (c *responsesClient) GetTimeout() time.Duration {
+func (c *chatCompletionsClient) OpenResponses(ctx context.Context, messages []model.Message) (*model.OpenResponsesResponse, error) {
+	return nil, fmt.Errorf("OpenResponses not supported for ChatCompletions client")
+}
+
+func (c *chatCompletionsClient) OpenResponsesWithContent(ctx context.Context, contentParts []model.OpenResponsesContentPart) (*model.OpenResponsesResponse, error) {
+	return nil, fmt.Errorf("OpenResponses not supported for ChatCompletions client")
+}
+
+func (c *chatCompletionsClient) GetTimeout() time.Duration {
 	return c.timeout
-}
-
-func (c *responsesClient) ChatCompletions(ctx context.Context, messages []model.Message) (*model.ChatCompletionsResponse, error) {
-	return nil, fmt.Errorf("ChatCompletions not supported for OpenResponses client")
-}
-
-func (c *responsesClient) ChatCompletionsWithContent(ctx context.Context, contentParts []model.ChatCompletionsContentPart) (*model.ChatCompletionsResponse, error) {
-	return nil, fmt.Errorf("ChatCompletions not supported for OpenResponses client")
 }

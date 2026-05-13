@@ -1,0 +1,50 @@
+[linters-settings.gofmt]
+style = "go"
+
+[linters-settings.govet]
+check-shadowing = true
+
+[linters-settings.staticcheck]
+checks = ["all"]
+
+[linters]
+disable-all = true
+enable = [
+  "govet",
+  "gofmt",
+  "goimports",
+  "staticcheck",
+  "unused",
+  "errcheck",
+  "ineffassign",
+  "typecheck",
+  "asciicheck",
+  "bodyclose",
+  "dupword",
+  "errname",
+  "exportloopref",
+  "cyclop",
+  "dupl",
+  "errorlint",
+  " exhaustive",
+  "gocognit",
+  "goconst",
+  "gocritic",
+  "godot",
+  "godox",
+  "errchkjson",
+  "funlen",
+  "wrapcheck",
+]
+
+[issues]
+exclude-use-default = false
+max-issues-per-linter = 0
+max-same-issues = 0
+
+[linters-settings.gocritic]
+disabled-checks = [
+  "appendAssign",
+  "evalOrder",
+  "unslice",
+]

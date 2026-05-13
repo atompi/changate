@@ -19,15 +19,15 @@ flowchart LR
 
 ## Features
 
-- **Multi-App Support**: Handle multiple Feishu apps via URL paths (e.g., `/feishu/app1`, `/feishu/app2`)
+- **ETCD Configuration Management**: Centralized multi-app config via ETCD with per-user agent override
 - **Multi-Agent Support**: Support for Hermes and OpenClaw agents via model configuration
 - **Message Encryption**: AES-256-CBC encrypted callback content support
 - **Signature Verification**: HMAC-SHA256 signature verification for request legitimacy
 - **Async Processing**: Agent requests are processed asynchronously to avoid Feishu callback timeout
 - **Session Persistence**: Configure `user` parameter for stable Agent sessions
-- **Flexible Configuration**: Environment variable injection for sensitive configs
 - **Image Processing**: Download images from Feishu messages, base64 encode and send to Agent
 - **File Response**: Support Agent returning local file paths, upload to Feishu for sending
+- **Agent Client Caching**: LRU+TTL cache to reduce repeated client creation overhead
 
 ## Tech Stack
 
@@ -38,6 +38,38 @@ flowchart LR
 
 ## Project Structure
 
+```
+changate/
+├── cmd/
+│   └── server/
+│       └── main.go           # Application entry point
+├── config/
+│   └── config.yaml           # Configuration file
+├── internal/
+│   ├── agent/
+│   │   └── responses.go     # Agent client implementation
+│   ├── config/
+│   │   ├── config.go        # Configuration loader
+│   │   └── etcd_loader.go  # ETCD config loader
+│   ├── etcd/
+│   │   └── client.go        # ETCD client
+│   ├── feishu/
+│   │   └── client.go        # Feishu API client
+│   ├── handler/
+│   │   ├── callback.go      # Callback handling logic
+│   │   └── agent_cache.go   # Agent client cache
+│   ├── model/
+│   │   ├── agent.go         # Agent response models
+│   │   └── event.go         # Event data models
+│   └── router/
+│       └── router.go         # Route setup
+└── pkg/
+    ├── crypto/
+    │   └── aes.go            # AES encryption utilities
+    ├── logger/
+    │   └── logger.go         # Logging utilities
+    └── retry/
+        └── retry.go          # Retry utilities
 ```
 changate/
 ├── cmd/
@@ -101,21 +133,13 @@ server:
 
 log_level: "info"
 
-apps:
-  - name: "app1"
-    app_id: "${FEISHU_APP_ID_1}"
-    app_secret: "${FEISHU_APP_SECRET_1}"
-    encrypt_key: "${FEISHU_ENCRYPT_KEY_1}"
-    verify_token: "${FEISHU_VERIFY_TOKEN_1}"
-    feishu_base_url: "https://open.feishu.cn"
-
-agent:
-  base_url: "http://127.0.0.1:8642"
-  api_path: "/v1/responses"
-  timeout: 3600s
-  model: "hermes-agent"
-  token: "${HERMES_TOKEN}"
-  user: ""                    # User identifier for session persistence
+etcd:
+  endpoints:
+    - "http://127.0.0.1:23790"
+    - "http://127.0.0.1:23791"
+    - "http://127.0.0.1:23792"
+  timeout: 5s
+  root_path: "/changate"
 ```
 
 #### Configuration Reference
@@ -124,31 +148,52 @@ agent:
 - `host` / `port`: Service listen address
 - `read_timeout` / `write_timeout`: HTTP timeout settings
 
-**Apps Config** (supports multiple Feishu apps):
-- `name`: App identifier, used for URL path matching
-- `app_id` / `app_secret`: Feishu app credentials
-- `encrypt_key`: AES-256-CBC encryption key (optional)
-- `verify_token`: Feishu callback verification token (optional)
-- `feishu_base_url`: Feishu open platform address
+**ETCD Config**:
+- `endpoints`: ETCD cluster node address list
+- `timeout`: ETCD operation timeout
+- `root_path`: Config root path (default `/changate`)
 
-**Agent Config**:
-- `base_url`: Agent API address
-- `api_path`: API path
-- `timeout`: Request timeout
-- `model`: Model name
-- `token`: Authentication token
-- `user`: User identifier for session persistence (optional)
+#### ETCD Config Structure
 
-#### Environment Variables
+Config is stored in ETCD with the following path structure:
 
-Sensitive configurations support environment variable injection with `${ENV_VAR_NAME}` format:
+| Path | Description |
+|------|-------------|
+| `/changate/<app_name>` | App-level config (enabled + default agent) |
+| `/changate/<app_name>/<user_id>` | User-level config (enabled + agent override) |
 
-```bash
-export FEISHU_APP_ID_1="cli_xxx"
-export FEISHU_APP_SECRET_1="xxx"
-export FEISHU_ENCRYPT_KEY_1="32-byte-key"
-export FEISHU_VERIFY_TOKEN_1="xxx"
-export HERMES_TOKEN="xxx"
+**App Config Example**:
+```json
+{
+  "enabled": true,
+  "app_id": "cli_xxxxxxxx",
+  "app_secret": "xxxxxxxx",
+  "encrypt_key": "xxxxxxxx",
+  "verify_token": "xxxxxxxx",
+  "feishu_base_url": "https://open.feishu.cn",
+  "max_concurrent": 100,
+  "agent": {
+    "base_url": "http://127.0.0.1:8642",
+    "api_path": "/v1/responses",
+    "timeout": 3600,
+    "model": "hermes-agent",
+    "token": "xxxxxxxx",
+    "user": "default"
+  }
+}
+```
+
+**User Config Example**:
+```json
+{
+  "enabled": true,
+  "agent": {
+    "base_url": "http://127.0.0.1:18789",
+    "model": "openclaw/default",
+    "token": "xxxxxxxx",
+    "user": "bob"
+  }
+}
 ```
 
 ### Run

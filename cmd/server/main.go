@@ -16,9 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	configPath string
-)
+var configPath string
 
 var serverCmd = &cobra.Command{
 	Use:   "server",

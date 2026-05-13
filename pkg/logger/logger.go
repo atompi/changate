@@ -43,28 +43,28 @@ func SetLevel(level string) {
 }
 
 // Debug logs at DEBUG level
-func Debug(format string, v ...interface{}) {
+func Debug(format string, v ...any) {
 	if currentLevel <= DEBUG {
 		logger.Printf("[DEBUG] "+format, v...)
 	}
 }
 
 // Info logs at INFO level
-func Info(format string, v ...interface{}) {
+func Info(format string, v ...any) {
 	if currentLevel <= INFO {
 		logger.Printf("[INFO] "+format, v...)
 	}
 }
 
 // Warn logs at WARN level
-func Warn(format string, v ...interface{}) {
+func Warn(format string, v ...any) {
 	if currentLevel <= WARN {
 		logger.Printf("[WARN] "+format, v...)
 	}
 }
 
 // Error logs at ERROR level
-func Error(format string, v ...interface{}) {
+func Error(format string, v ...any) {
 	if currentLevel <= ERROR {
 		logger.Printf("[ERROR] "+format, v...)
 	}

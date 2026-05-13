@@ -10,7 +10,7 @@ import (
 
 type Config struct {
 	Server   ServerConfig `mapstructure:"server"`
-	Apps     []AppConfig  `mapstructure:"apps"`
+	Etcd     EtcdConfig   `mapstructure:"etcd"`
 	LogLevel string       `mapstructure:"log_level"`
 }
 
@@ -21,27 +21,46 @@ type ServerConfig struct {
 	WriteTimeout time.Duration `mapstructure:"write_timeout"`
 }
 
-type AppConfig struct {
-	Name          string      `mapstructure:"name"`
-	AppID         string      `mapstructure:"app_id"`
-	AppSecret     string      `mapstructure:"app_secret"`
-	EncryptKey    string      `mapstructure:"encrypt_key"`
-	VerifyToken   string      `mapstructure:"verify_token"`
-	FeishuBaseURL string      `mapstructure:"feishu_base_url"`
-	Agent         AgentConfig `mapstructure:"agent"`
-	MaxConcurrent int         `mapstructure:"max_concurrent"`
+type EtcdConfig struct {
+	Endpoints          []string      `mapstructure:"endpoints"`
+	Timeout            time.Duration `mapstructure:"timeout"`
+	CAFile             string        `mapstructure:"ca_file"`
+	CertFile           string        `mapstructure:"cert_file"`
+	KeyFile            string        `mapstructure:"key_file"`
+	InsecureSkipVerify bool          `mapstructure:"insecure_skip_verify"`
+	RootPath           string        `mapstructure:"root_path"`
 }
 
 type AgentConfig struct {
-	BaseURL        string        `mapstructure:"base_url"`
-	APIPath        string        `mapstructure:"api_path"`
-	Timeout        time.Duration `mapstructure:"timeout"`
-	Model          string        `mapstructure:"model"`
-	Token          string        `mapstructure:"token"`
-	User           string        `mapstructure:"user"`
-	Conversation   string        `mapstructure:"conversation"`
-	MaxRetries     int           `mapstructure:"max_retries"`
-	RetryBaseDelay time.Duration `mapstructure:"retry_base_delay"`
+	Type           string        `json:"type"`
+	BaseURL        string        `json:"base_url"`
+	APIPath        string        `json:"api_path"`
+	Timeout        time.Duration `json:"timeout"`
+	Model          string        `json:"model"`
+	Token          string        `json:"token"`
+	User           string        `json:"user"`
+	Conversation   string        `json:"conversation"`
+	MaxRetries     int           `json:"max_retries"`
+	RetryBaseDelay time.Duration `json:"retry_base_delay"`
+}
+
+// AppConfig is the configuration stored at /changate/<app_name>
+type AppConfig struct {
+	Enabled       bool          `json:"enabled"`
+	AppID         string        `json:"app_id"`
+	AppSecret     string        `json:"app_secret"`
+	EncryptKey    string        `json:"encrypt_key"`
+	VerifyToken   string        `json:"verify_token"`
+	FeishuBaseURL string        `json:"feishu_base_url"`
+	MaxConcurrent int           `json:"max_concurrent"`
+	Timeout       time.Duration `json:"timeout"`
+	Agent         AgentConfig   `json:"agent"`
+}
+
+// UserConfig is the configuration stored at /changate/<app_name>/<user_id>
+type UserConfig struct {
+	Enabled bool        `json:"enabled"`
+	Agent   AgentConfig `json:"agent"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -62,38 +81,11 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	resolveEnvVars(&cfg)
-
 	if err := validateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
 	return &cfg, nil
-}
-
-func resolveEnvVars(cfg *Config) {
-	for i := range cfg.Apps {
-		cfg.Apps[i].AppID = resolveEnvValue(cfg.Apps[i].AppID)
-		cfg.Apps[i].AppSecret = resolveEnvValue(cfg.Apps[i].AppSecret)
-		cfg.Apps[i].EncryptKey = resolveEnvValue(cfg.Apps[i].EncryptKey)
-		cfg.Apps[i].VerifyToken = resolveEnvValue(cfg.Apps[i].VerifyToken)
-		cfg.Apps[i].Agent.Token = resolveEnvValue(cfg.Apps[i].Agent.Token)
-	}
-}
-
-func resolveEnvValue(val string) string {
-	if strings.HasPrefix(val, "${") && strings.HasSuffix(val, "}") {
-		envKey := val[2 : len(val)-1]
-		return getEnvOrDefault(envKey, val)
-	}
-	return val
-}
-
-func getEnvOrDefault(key, defaultVal string) string {
-	if val := strings.TrimSpace(viper.GetString(key)); val != "" {
-		return val
-	}
-	return defaultVal
 }
 
 func validateConfig(cfg *Config) error {
@@ -110,51 +102,21 @@ func validateConfig(cfg *Config) error {
 		cfg.Server.WriteTimeout = 30 * time.Second
 	}
 
-	if len(cfg.Apps) == 0 {
-		return fmt.Errorf("at least one app configuration is required")
+	// ETCD-based config - apps are loaded from etcd
+	if len(cfg.Etcd.Endpoints) == 0 {
+		return fmt.Errorf("etcd.endpoints is required")
 	}
-
-	for i := range cfg.Apps {
-		app := &cfg.Apps[i]
-		if app.Name == "" {
-			return fmt.Errorf("app[%d]: name is required", i)
-		}
-		if app.MaxConcurrent == 0 {
-			app.MaxConcurrent = 100
-		}
-		if app.Agent.BaseURL == "" {
-			return fmt.Errorf("app[%d].agent.base_url is required", i)
-		}
-		if app.Agent.APIPath == "" {
-			app.Agent.APIPath = "/v1/responses"
-		}
-		if app.Agent.Timeout == 0 {
-			app.Agent.Timeout = 120 * time.Second
-		}
-		if app.Agent.Model == "" {
-			app.Agent.Model = "hermes-agent"
-		}
-		if app.Agent.MaxRetries == 0 {
-			app.Agent.MaxRetries = 3
-		}
-		if app.Agent.RetryBaseDelay == 0 {
-			app.Agent.RetryBaseDelay = 100 * time.Millisecond
-		}
+	if cfg.Etcd.Timeout == 0 {
+		cfg.Etcd.Timeout = 5 * time.Second
+	}
+	if cfg.Etcd.RootPath == "" {
+		cfg.Etcd.RootPath = "/changate"
 	}
 
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
 	}
 
-	return nil
-}
-
-func (c *Config) GetAppByName(name string) *AppConfig {
-	for i := range c.Apps {
-		if c.Apps[i].Name == name {
-			return &c.Apps[i]
-		}
-	}
 	return nil
 }
 

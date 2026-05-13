@@ -20,9 +20,9 @@ type URLVerificationResponse struct {
 
 // EventCallbackRequest represents the incoming event callback from Feishu.
 type EventCallbackRequest struct {
-	Schema string          `json:"schema"`
-	Header EventHeader     `json:"header"`
-	Event  json.RawMessage `json:"event"`
+	Schema string       `json:"schema"`
+	Header EventHeader  `json:"header"`
+	Event  MessageEvent `json:"event"`
 }
 
 // EventHeader contains metadata about the event.
@@ -83,7 +83,25 @@ type TextContent struct {
 }
 
 // ContentPart represents a content block in a multimodal message.
-type ContentPart struct {
+type MessageContentPart struct {
+	Type     string
+	Text     string
+	Key      string
+	ImageURL string
+}
+
+type ChatCompletionsImageURL struct {
+	URL    string `json:"url,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+type ChatCompletionsContentPart struct {
+	Type     string                   `json:"type"`
+	Text     string                   `json:"text,omitempty"`
+	ImageURL *ChatCompletionsImageURL `json:"image_url,omitempty"`
+}
+
+type OpenResponsesContentPart struct {
 	Type     string `json:"type"`
 	Text     string `json:"text,omitempty"`
 	ImageURL string `json:"image_url,omitempty"`
@@ -91,7 +109,7 @@ type ContentPart struct {
 
 // ParseMessageContent parses message content into content parts based on message type.
 // Supported types: text, image, post
-func ParseMessageContent(content string, messageType string) ([]ContentPart, error) {
+func ParseMessageContent(content string, messageType string) ([]MessageContentPart, error) {
 	switch messageType {
 	case "text":
 		var text struct {
@@ -103,7 +121,10 @@ func ParseMessageContent(content string, messageType string) ([]ContentPart, err
 		if text.Text == "" {
 			return nil, fmt.Errorf("empty text content")
 		}
-		return []ContentPart{{Type: "input_text", Text: text.Text}}, nil
+		return []MessageContentPart{{
+			Type: "input_text",
+			Text: text.Text,
+		}}, nil
 
 	case "image":
 		var img struct {
@@ -115,14 +136,15 @@ func ParseMessageContent(content string, messageType string) ([]ContentPart, err
 		if img.ImageKey == "" {
 			return nil, fmt.Errorf("empty image_key in image message")
 		}
-		return []ContentPart{{
+		return []MessageContentPart{{
 			Type:     "input_image",
+			Key:      img.ImageKey,
 			ImageURL: img.ImageKey,
 		}}, nil
 
 	case "post":
 		var richText struct {
-			Content []interface{} `json:"content"`
+			Content []any `json:"content"`
 		}
 		if err := json.Unmarshal([]byte(content), &richText); err != nil {
 			return nil, fmt.Errorf("failed to parse post content: %w", err)
@@ -130,14 +152,14 @@ func ParseMessageContent(content string, messageType string) ([]ContentPart, err
 		if len(richText.Content) == 0 {
 			return nil, fmt.Errorf("empty post content")
 		}
-		parts := []ContentPart{}
+		parts := []MessageContentPart{}
 		for _, blockIfc := range richText.Content {
-			block, ok := blockIfc.([]interface{})
+			block, ok := blockIfc.([]any)
 			if !ok {
 				continue
 			}
 			for _, itemIfc := range block {
-				item, ok := itemIfc.(map[string]interface{})
+				item, ok := itemIfc.(map[string]any)
 				if !ok {
 					continue
 				}
@@ -151,8 +173,9 @@ func ParseMessageContent(content string, messageType string) ([]ContentPart, err
 					keyVal := item["image_key"]
 					imageKey, ok := keyVal.(string)
 					if ok && imageKey != "" {
-						parts = append(parts, ContentPart{
+						parts = append(parts, MessageContentPart{
 							Type:     "input_image",
+							Key:      imageKey,
 							ImageURL: imageKey,
 						})
 					}
@@ -160,7 +183,10 @@ func ParseMessageContent(content string, messageType string) ([]ContentPart, err
 					textVal := item["text"]
 					text, ok := textVal.(string)
 					if ok && text != "" {
-						parts = append(parts, ContentPart{Type: "input_text", Text: text})
+						parts = append(parts, MessageContentPart{
+							Type: "input_text",
+							Text: text,
+						})
 					}
 				}
 			}

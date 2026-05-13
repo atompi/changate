@@ -1,44 +1,19 @@
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 8081
   read_timeout: 30s
   write_timeout: 30s
 
-log_level: "info"
+log_level: "debug"
 
-apps:
-  - name: "app1"
-    app_id: "${FEISHU_APP_ID_1}"
-    app_secret: "${FEISHU_APP_SECRET_1}"
-    encrypt_key: "${FEISHU_ENCRYPT_KEY_1}"
-    verify_token: "${FEISHU_VERIFY_TOKEN_1}"
-    feishu_base_url: "https://open.feishu.cn"
-    max_concurrent: 100
-    agent:
-      base_url: "http://127.0.0.1:8642"
-      api_path: "/v1/responses"
-      timeout: 3600s
-      model: "hermes-agent"
-      token: "${HERMES_TOKEN}"
-      user: ""
-      conversation: ""
-      max_retries: 3
-      retry_base_delay: 100ms
-
-  - name: "app2"
-    app_id: "${FEISHU_APP_ID_2}"
-    app_secret: "${FEISHU_APP_SECRET_2}"
-    encrypt_key: "${FEISHU_ENCRYPT_KEY_2}"
-    verify_token: "${FEISHU_VERIFY_TOKEN_2}"
-    feishu_base_url: "https://open.feishu.cn"
-    max_concurrent: 100
-    agent:
-      base_url: "http://127.0.0.1:18789"
-      api_path: "/v1/responses"
-      timeout: 3600s
-      model: "openclaw/default"
-      token: "${OPENCLAW_TOKEN}"
-      user: "user@example.com"
-      conversation: ""
-      max_retries: 3
-      retry_base_delay: 100ms
+etcd:
+  endpoints:
+    - "http://127.0.0.1:23790"
+    - "http://127.0.0.1:23791"
+    - "http://127.0.0.1:23792"
+  timeout: 5s
+  ca_file: "./ssl/etcd/ca.pem"
+  cert_file: "./ssl/etcd/client.pem"
+  key_file: "./ssl/etcd/client-key.pem"
+  insecure_skip_verify: false
+  root_path: "/changate"
