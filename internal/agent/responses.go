@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/atompi/changate/internal/model"
-	"github.com/atompi/changate/pkg/logger"
+	_logger "github.com/atompi/changate/pkg/logger"
 	"github.com/atompi/changate/pkg/retry"
 )
 
@@ -79,7 +79,8 @@ func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Me
 		MaxRetries: c.maxRetries,
 		BaseDelay:  c.retryBaseDelay,
 		BeforeRetry: func(attempt int, delay time.Duration) {
-			logger.Debug("[agent] retry attempt %d after delay %v", attempt, delay)
+			_logger.Debugf("[agent] retry attempt %d after delay %v", attempt, delay)
+			time.Sleep(delay)
 		},
 	}, func() error {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
@@ -92,11 +93,8 @@ func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Me
 			req.Header.Set("Authorization", "Bearer "+c.token)
 		}
 
-		logger.Debug("[agent request] url=%s body=%s", url, string(jsonBody))
-
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			logger.Debug("[agent] request failed: %v", err)
 			return fmt.Errorf("failed to send request: %w", err)
 		}
 		defer resp.Body.Close()
@@ -107,7 +105,6 @@ func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Me
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			logger.Debug("[agent] unexpected status code: %v", resp.StatusCode)
 			if resp.StatusCode >= 500 {
 				return fmt.Errorf("%w: status %d, body: %s", retry.ErrTransient, resp.StatusCode, string(respBody))
 			}
@@ -123,9 +120,6 @@ func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Me
 	if err != nil {
 		return nil, err
 	}
-
-	rawOutput, _ := json.Marshal(respData.Output)
-	logger.Debug("[agent response] raw_body=%s", string(rawOutput))
 
 	return &respData, nil
 }

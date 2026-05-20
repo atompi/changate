@@ -21,9 +21,9 @@ test: ## Run all tests
 	$(GO) test -v -race -cover ./...
 
 test-coverage: ## Run tests with coverage report
-	$(GO) test -coverprofile=coverage.out ./...
-	$(GO) tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
+	$(GO) test -coverprofile=dist/coverage.out ./...
+	$(GO) tool cover -html=dist/coverage.out -o dist/coverage.html
+	@echo "Coverage report: dist/coverage.html"
 
 lint: ## Run golangci-lint
 	golangci-lint run ./...
@@ -37,7 +37,6 @@ vet: ## Run go vet
 
 clean: ## Clean build artifacts
 	rm -rf $(BUILD_DIR)
-	rm -f coverage.out coverage.html
 
 docker-build: ## Build Docker image
 	docker build -t atompi/changate .

@@ -9,11 +9,16 @@ import (
 func TestLoad_ValidConfig(t *testing.T) {
 	content := `
 server:
+  mode: debug
   host: "127.0.0.1"
   port: 9090
   read_timeout: 60s
   write_timeout: 60s
-log_level: "debug"
+log:
+  level: "debug"
+  format: "console"
+  path: ""
+  multi_files: false
 etcd:
   endpoints:
     - "http://127.0.0.1:2379"
@@ -42,8 +47,8 @@ etcd:
 	if cfg.Server.Host != "127.0.0.1" {
 		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "127.0.0.1")
 	}
-	if cfg.LogLevel != "debug" {
-		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
+	if cfg.Log.Level != "debug" {
+		t.Errorf("Log.Level = %q, want %q", cfg.Log.Level, "debug")
 	}
 	if len(cfg.Etcd.Endpoints) != 1 {
 		t.Errorf("len(Etcd.Endpoints) = %d, want 1", len(cfg.Etcd.Endpoints))
@@ -54,7 +59,10 @@ func TestLoad_DefaultValues(t *testing.T) {
 	content := `
 server:
   port: 0
-log_level: ""
+log:
+  level: ""
+  format: ""
+  path: ""
 etcd:
   endpoints:
     - "http://127.0.0.1:2379"
@@ -95,8 +103,8 @@ etcd:
 	if cfg.Etcd.RootPath != "/changate" {
 		t.Errorf("Etcd.RootPath = %q, want %q (default)", cfg.Etcd.RootPath, "/changate")
 	}
-	if cfg.LogLevel != "info" {
-		t.Errorf("LogLevel = %q, want %q (default)", cfg.LogLevel, "info")
+	if cfg.Log.Level != "info" {
+		t.Errorf("Log.Level = %q, want %q (default)", cfg.Log.Level, "info")
 	}
 }
 

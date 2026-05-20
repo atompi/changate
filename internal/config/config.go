@@ -5,16 +5,25 @@ import (
 	"strings"
 	"time"
 
+	_log "github.com/atompi/goutil/log"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Server   ServerConfig `mapstructure:"server"`
-	Etcd     EtcdConfig   `mapstructure:"etcd"`
-	LogLevel string       `mapstructure:"log_level"`
+	Server ServerConfig `mapstructure:"server"`
+	Etcd   EtcdConfig   `mapstructure:"etcd"`
+	Log    LogConfig    `mapstructure:"log"`
+}
+
+type LogConfig struct {
+	Level      string `mapstructure:"level"`
+	Format     string `mapstructure:"format"`
+	Path       string `mapstructure:"path"`
+	MultiFiles bool   `mapstructure:"multi_files"`
 }
 
 type ServerConfig struct {
+	Mode         string        `mapstructure:"mode"`
 	Host         string        `mapstructure:"host"`
 	Port         int           `mapstructure:"port"`
 	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
@@ -89,6 +98,9 @@ func Load(configPath string) (*Config, error) {
 }
 
 func validateConfig(cfg *Config) error {
+	if cfg.Server.Mode == "" {
+		cfg.Server.Mode = "release"
+	}
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
 	}
@@ -102,7 +114,6 @@ func validateConfig(cfg *Config) error {
 		cfg.Server.WriteTimeout = 30 * time.Second
 	}
 
-	// ETCD-based config - apps are loaded from etcd
 	if len(cfg.Etcd.Endpoints) == 0 {
 		return fmt.Errorf("etcd.endpoints is required")
 	}
@@ -113,8 +124,17 @@ func validateConfig(cfg *Config) error {
 		cfg.Etcd.RootPath = "/changate"
 	}
 
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = "info"
+	if cfg.Log.Level == "" {
+		cfg.Log.Level = "info"
+	}
+	if cfg.Log.Format == "" {
+		cfg.Log.Format = "console"
+	}
+	if cfg.Log.Path == "" {
+		cfg.Log.Path = "logs/changate"
+	}
+	if cfg.Log.Path == "stdout" || cfg.Log.Path == "stderr" {
+		cfg.Log.MultiFiles = false
 	}
 
 	return nil
@@ -122,4 +142,13 @@ func validateConfig(cfg *Config) error {
 
 func (s *ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
+}
+
+func NewLogConfig(logCfg LogConfig) *_log.Logger {
+	return &_log.Logger{
+		Level:      logCfg.Level,
+		Format:     logCfg.Format,
+		Path:       logCfg.Path,
+		MultiFiles: logCfg.MultiFiles,
+	}
 }

@@ -1,71 +1,29 @@
 package logger
 
 import (
-	"log"
-	"os"
-	"strings"
+	"fmt"
+	"log/slog"
+
+	"github.com/atompi/goutil/log"
 )
 
-// LogLevel represents the logging level
-type LogLevel int
-
-const (
-	DEBUG LogLevel = iota
-	INFO
-	WARN
-	ERROR
-)
-
-// ParseLogLevel parses a string to LogLevel
-func ParseLogLevel(s string) LogLevel {
-	switch strings.ToLower(s) {
-	case "debug":
-		return DEBUG
-	case "info":
-		return INFO
-	case "warn", "warning":
-		return WARN
-	case "error":
-		return ERROR
-	default:
-		return INFO
-	}
+func Init(opts ...log.Options) *slog.Logger {
+	l := log.NewLoggerOptions(opts...)
+	return log.NewSlogLogger(l)
 }
 
-var (
-	currentLevel = INFO
-	logger       = log.New(os.Stdout, "", log.LstdFlags)
-)
-
-// SetLevel sets the global log level
-func SetLevel(level string) {
-	currentLevel = ParseLogLevel(level)
+func Debugf(format string, args ...any) {
+	slog.Debug(fmt.Sprintf(format, args...))
 }
 
-// Debug logs at DEBUG level
-func Debug(format string, v ...any) {
-	if currentLevel <= DEBUG {
-		logger.Printf("[DEBUG] "+format, v...)
-	}
+func Infof(format string, args ...any) {
+	slog.Info(fmt.Sprintf(format, args...))
 }
 
-// Info logs at INFO level
-func Info(format string, v ...any) {
-	if currentLevel <= INFO {
-		logger.Printf("[INFO] "+format, v...)
-	}
+func Warnf(format string, args ...any) {
+	slog.Warn(fmt.Sprintf(format, args...))
 }
 
-// Warn logs at WARN level
-func Warn(format string, v ...any) {
-	if currentLevel <= WARN {
-		logger.Printf("[WARN] "+format, v...)
-	}
-}
-
-// Error logs at ERROR level
-func Error(format string, v ...any) {
-	if currentLevel <= ERROR {
-		logger.Printf("[ERROR] "+format, v...)
-	}
+func Errorf(format string, args ...any) {
+	slog.Error(fmt.Sprintf(format, args...))
 }

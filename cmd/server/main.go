@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,7 +12,7 @@ import (
 
 	"github.com/atompi/changate/internal/config"
 	"github.com/atompi/changate/internal/router"
-	"github.com/atompi/changate/pkg/logger"
+	_logger "github.com/atompi/changate/pkg/logger"
 
 	"github.com/spf13/cobra"
 )
@@ -24,8 +25,12 @@ var serverCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg, err := config.Load(configPath)
 		if err != nil {
-			log.Fatalf("Failed to load config: %v", err)
+			_logger.Errorf("Failed to load config: %v", err)
 		}
+
+		logCfg := config.NewLogConfig(cfg.Log)
+		logger := _logger.Init(logCfg.ToOptions()...)
+		slog.SetDefault(logger)
 
 		result := router.Setup(cfg)
 
@@ -37,28 +42,27 @@ var serverCmd = &cobra.Command{
 		}
 
 		go func() {
-			logger.SetLevel(cfg.LogLevel)
-			logger.Info("Starting server on %s", cfg.Server.Address())
+			_logger.Infof("Starting server on %s", cfg.Server.Address())
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("Failed to start server: %v", err)
+				_logger.Errorf("Failed to start server: %v", err)
 			}
 		}()
 
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
-		logger.Info("Shutting down server...")
+		_logger.Infof("Shutting down server...")
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Fatalf("Server forced to shutdown: %v", err)
+			_logger.Errorf("Server forced to shutdown: %v", err)
 		}
 
-		logger.Info("Waiting for in-flight requests...")
+		_logger.Infof("Waiting for in-flight requests...")
 		result.Handler.WaitForCompletion()
 
-		logger.Info("Server exited")
+		_logger.Infof("Server exited")
 	},
 }
 

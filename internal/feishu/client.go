@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/atompi/changate/pkg/logger"
+	_logger "github.com/atompi/changate/pkg/logger"
 	"github.com/atompi/changate/pkg/retry"
 )
 
@@ -64,7 +64,7 @@ func (c *Client) ReplyMessage(ctx context.Context, accessToken, messageID, msgTy
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	logger.Debug("[feishu reply] url=%s body=%s", url, string(jsonBody))
+	_logger.Debugf("[feishu reply] url=%s body=%s", url, string(jsonBody))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
@@ -79,18 +79,17 @@ func (c *Client) ReplyMessage(ctx context.Context, accessToken, messageID, msgTy
 		MaxRetries: 2,
 		BaseDelay:  100 * time.Millisecond,
 		BeforeRetry: func(attempt int, delay time.Duration) {
-			logger.Debug("[feishu reply] retrying in %v (attempt %d/3)", delay, attempt+1)
+			_logger.Warnf("[feishu reply] retrying in %v (attempt %d/3)", delay, attempt+1)
+			time.Sleep(delay)
 		},
 	}, func() error {
 		resp, err = c.client.Do(req)
 		if err != nil {
-			logger.Debug("[feishu reply] request failed: %v", err)
 			return fmt.Errorf("failed to send request: %w", err)
 		}
 		defer resp.Body.Close()
 
 		respBody, _ := io.ReadAll(resp.Body)
-		logger.Debug("[feishu reply response] status=%d body=%s", resp.StatusCode, string(respBody))
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 
 		if resp.StatusCode == http.StatusOK {
@@ -198,6 +197,7 @@ func (c *Client) GetAppAccessToken(ctx context.Context) (string, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		_logger.Errorf("[feishu] GetAppAccessToken request failed: %v", err)
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -239,6 +239,7 @@ func (c *Client) GetTenantAccessToken(ctx context.Context) (string, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		_logger.Errorf("[feishu] GetTenantAccessToken request failed: %v", err)
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -284,8 +285,6 @@ func (c *Client) UploadMessageResource(ctx context.Context, accessToken string, 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
-	logger.Debug("[feishu upload message resource] url=%s file_name=%s file_type=%s size=%d", url, fileName, fileType, len(fileData))
-
 	var resp *http.Response
 	err = retry.Do(ctx, retry.Config{
 		MaxRetries: 2,
@@ -311,7 +310,6 @@ func (c *Client) UploadMessageResource(ctx context.Context, accessToken string, 
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
-	logger.Debug("[feishu upload message resource response] status=%d body=%s", resp.StatusCode, string(respBody))
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("upload failed: status %d", resp.StatusCode)
@@ -348,8 +346,6 @@ func (c *Client) DownloadMessageResource(ctx context.Context, accessToken, messa
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
-	logger.Debug("[feishu download message resource] url=%s message_id=%s file_key=%s", url, messageID, fileKey)
-
 	var resp *http.Response
 	err = retry.Do(ctx, retry.Config{
 		MaxRetries: 2,
@@ -378,6 +374,5 @@ func (c *Client) DownloadMessageResource(ctx context.Context, accessToken, messa
 
 	defer resp.Body.Close()
 
-	logger.Debug("[feishu download message resource] downloaded size=%d", len(data))
 	return data, nil
 }

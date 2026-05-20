@@ -1,16 +1,21 @@
 server:
+  mode: debug
   host: "0.0.0.0"
   port: 8081
   read_timeout: 30s
   write_timeout: 30s
 
-log_level: "debug"
+log:
+  level: "debug"
+  format: "console"
+  path: "logs/changate"
+  multi_files: true
 
 etcd:
   endpoints:
-    - "http://127.0.0.1:23790"
-    - "http://127.0.0.1:23791"
-    - "http://127.0.0.1:23792"
+    - "https://127.0.0.1:23790"
+    - "https://127.0.0.1:23791"
+    - "https://127.0.0.1:23792"
   timeout: 5s
   ca_file: "./ssl/etcd/ca.pem"
   cert_file: "./ssl/etcd/client.pem"
