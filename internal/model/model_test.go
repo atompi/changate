@@ -30,8 +30,8 @@ func TestParseMessageContent_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestResponsesResponse_GetContent_StringContent(t *testing.T) {
-	resp := &ResponsesResponse{
+func TestOpenResponsesResponse_GetContent_StringContent(t *testing.T) {
+	resp := &OpenResponsesResponse{
 		Output: []Output{
 			{
 				Type: "message",
@@ -49,8 +49,8 @@ func TestResponsesResponse_GetContent_StringContent(t *testing.T) {
 	}
 }
 
-func TestResponsesResponse_GetContent_EmptyOutput(t *testing.T) {
-	resp := &ResponsesResponse{
+func TestOpenResponsesResponse_GetContent_EmptyOutput(t *testing.T) {
+	resp := &OpenResponsesResponse{
 		Output: []Output{},
 	}
 
@@ -60,8 +60,8 @@ func TestResponsesResponse_GetContent_EmptyOutput(t *testing.T) {
 	}
 }
 
-func TestResponsesResponse_GetFilePath_WithMediaPrefix(t *testing.T) {
-	resp := &ResponsesResponse{
+func TestOpenResponsesResponse_GetFilePath_WithMediaPrefix(t *testing.T) {
+	resp := &OpenResponsesResponse{
 		Output: []Output{
 			{
 				Type: "message",
@@ -79,8 +79,8 @@ func TestResponsesResponse_GetFilePath_WithMediaPrefix(t *testing.T) {
 	}
 }
 
-func TestResponsesResponse_GetFilePath_WithoutMediaPrefix(t *testing.T) {
-	resp := &ResponsesResponse{
+func TestOpenResponsesResponse_GetFilePath_WithoutMediaPrefix(t *testing.T) {
+	resp := &OpenResponsesResponse{
 		Output: []Output{
 			{
 				Type: "message",
@@ -98,8 +98,8 @@ func TestResponsesResponse_GetFilePath_WithoutMediaPrefix(t *testing.T) {
 	}
 }
 
-func TestResponsesResponse_GetFilePath_Empty(t *testing.T) {
-	resp := &ResponsesResponse{
+func TestOpenResponsesResponse_GetFilePath_Empty(t *testing.T) {
+	resp := &OpenResponsesResponse{
 		Output: []Output{},
 	}
 

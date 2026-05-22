@@ -259,8 +259,20 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 		}
 
 		key := cacheKey{appName: appName, userID: userID}
+		tools := make([]model.MCPTool, 0, len(app.Agent.Tools))
+		for _, t := range app.Agent.Tools {
+			if t.Enabled {
+				tools = append(tools, model.MCPTool{
+					Type:            "mcp",
+					ServerURL:       t.ServerURL,
+					ServerLabel:     t.ServerLabel,
+					RequireApproval: t.RequireApproval,
+					Token:           t.Token,
+				})
+			}
+		}
 		agentClient := h.agentCache.GetOrCreate(context.Background(), key, app, func(cfg *config.AppConfig) agent.Client {
-			return agent.NewClient(cfg.Agent.BaseURL, cfg.Agent.APIPath, cfg.Agent.Model, cfg.Agent.Token, cfg.Agent.User, cfg.Agent.Conversation, agentTimeout, agentMaxRetries, agentRetryBaseDelay, cfg.Agent.Type)
+			return agent.NewClient(cfg.Agent.BaseURL, cfg.Agent.APIPath, cfg.Agent.Model, cfg.Agent.Token, cfg.Agent.User, cfg.Agent.Conversation, agentTimeout, agentMaxRetries, agentRetryBaseDelay, cfg.Agent.Type, tools)
 		})
 
 		app1Ctx, app1Cancel := context.WithTimeout(context.Background(), appTimeout)
@@ -306,6 +318,11 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 			filePath = openResp.GetFilePath()
 		}
 
+		if replyContent == "" && filePath == "" {
+			_logger.Errorf("empty agent response")
+			return
+		}
+
 		app2Ctx, app2Cancel := context.WithTimeout(context.Background(), appTimeout)
 		defer app2Cancel()
 
@@ -319,29 +336,13 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 			_logger.Debugf("[processMessageAsync] sending image response: url=%s", filePath)
 			if err := feishuClient.SendFileMessage(app2Ctx, accessToken, messageID, filePath); err != nil {
 				_logger.Errorf("failed to send image reply: %v, falling back to text", err)
-				if replyContent != "" {
-					if err := feishuClient.SendTextMessage(app2Ctx, accessToken, messageID, replyContent); err != nil {
-						_logger.Errorf("failed to send text reply: %v", err)
-						return
-					}
-				}
-			} else {
-				_logger.Infof("image reply sent successfully: message_id=%s", messageID)
-				if replyContent != "" {
-					if err := feishuClient.SendTextMessage(app2Ctx, accessToken, messageID, replyContent); err != nil {
-						_logger.Errorf("failed to send text reply: %v", err)
-						return
-					}
-				}
 			}
-		} else if replyContent != "" {
+		}
+		if replyContent != "" {
 			if err := feishuClient.SendTextMessage(app2Ctx, accessToken, messageID, replyContent); err != nil {
 				_logger.Errorf("failed to send reply: %v", err)
 				return
 			}
-		} else {
-			_logger.Errorf("empty agent response")
-			return
 		}
 
 		_logger.Infof("async message processed successfully: message_id=%s", messageID)

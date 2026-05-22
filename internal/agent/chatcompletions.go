@@ -1,125 +1,108 @@
 package agent
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"time"
 
 	"github.com/atompi/changate/internal/model"
-	_logger "github.com/atompi/changate/pkg/logger"
-	"github.com/atompi/changate/pkg/retry"
+	"github.com/openai/openai-go/v3"
 )
 
-type chatCompletionsRequest struct {
-	Model    string          `json:"model"`
-	Messages []model.Message `json:"messages"`
-	User     string          `json:"user,omitempty"`
-	Stream   bool            `json:"stream"`
-}
-
 type chatCompletionsClient struct {
-	baseURL        string
-	apiPath        string
-	timeout        time.Duration
-	model          string
-	token          string
-	user           string
-	conversation   string
-	maxRetries     int
-	retryBaseDelay time.Duration
-	httpClient     *http.Client
+	sdkClient openai.Client
+	model     string
+	tools     []model.MCPTool
 }
 
-func NewChatCompletionsClient(baseURL, apiPath, model, token, user, conversation string, timeout time.Duration, maxRetries int, retryBaseDelay time.Duration) *chatCompletionsClient {
-	if apiPath == "" {
-		apiPath = "/v1/chat/completions"
-	}
-	if timeout == 0 {
-		timeout = 120 * time.Second
-	}
+func newChatCompletionsClient(sdkClient openai.Client, apiPath, model string, tools []model.MCPTool) *chatCompletionsClient {
 	return &chatCompletionsClient{
-		baseURL:        baseURL,
-		apiPath:        apiPath,
-		timeout:        timeout,
-		model:          model,
-		token:          token,
-		user:           user,
-		conversation:   conversation,
-		maxRetries:     maxRetries,
-		retryBaseDelay: retryBaseDelay,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
+		sdkClient: sdkClient,
+		model:     model,
+		tools:     tools,
 	}
 }
 
 func (c *chatCompletionsClient) ChatCompletions(ctx context.Context, messages []model.Message) (*model.ChatCompletionsResponse, error) {
-	url := fmt.Sprintf("%s%s", c.baseURL, c.apiPath)
+	maxIterations := 10
+	executor := NewMCPToolExecutor(30 * time.Second)
 
-	reqBody := chatCompletionsRequest{
-		Model:    c.model,
-		Messages: messages,
-		User:     c.user,
-		Stream:   false,
-	}
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	var respData model.ChatCompletionsResponse
-
-	err = retry.Do(ctx, retry.Config{
-		MaxRetries: c.maxRetries,
-		BaseDelay:  c.retryBaseDelay,
-		BeforeRetry: func(attempt int, delay time.Duration) {
-			_logger.Debugf("[agent] retry attempt %d after delay %v", attempt, delay)
-			time.Sleep(delay)
-		},
-	}, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
-		if err != nil {
-			return fmt.Errorf("failed to create request: %w", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		if c.token != "" {
-			req.Header.Set("Authorization", "Bearer "+c.token)
-		}
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("failed to send request: %w", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read response body: %w", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			if resp.StatusCode >= 500 {
-				return fmt.Errorf("%w: status %d, body: %s", retry.ErrTransient, resp.StatusCode, string(respBody))
+	for i := 0; i < maxIterations; i++ {
+		sdkMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+		for _, msg := range messages {
+			sdkMsg := convertModelMessageToSDK(msg)
+			if sdkMsg != nil {
+				sdkMessages = append(sdkMessages, *sdkMsg)
 			}
-			return fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(respBody))
 		}
 
-		if err := json.Unmarshal(respBody, &respData); err != nil {
-			return fmt.Errorf("failed to decode response: %w", err)
+		sdkTools := convertMCPToolsToSDKChat(c.tools)
+
+		params := openai.ChatCompletionNewParams{
+			Model:    openai.ChatModel(c.model),
+			Messages: sdkMessages,
+		}
+		if len(sdkTools) > 0 {
+			params.Tools = sdkTools
 		}
 
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		resp, err := c.sdkClient.Chat.Completions.New(ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("chat completions failed: %w", err)
+		}
+
+		modelResp := convertSDKChatCompletionToModel(resp)
+
+		if !modelResp.HasToolCalls() {
+			return modelResp, nil
+		}
+
+		toolCalls := modelResp.GetToolCalls()
+		if len(toolCalls) == 0 {
+			return modelResp, nil
+		}
+
+		assistantMsg := model.Message{
+			Role:      "assistant",
+			Content:   "",
+			ToolCalls: toolCalls,
+		}
+		messages = append(messages, assistantMsg)
+
+		for _, tc := range toolCalls {
+			tool := c.findToolByName(tc.Name)
+			if tool == nil {
+				messages = append(messages, model.Message{
+					Role:       "tool",
+					Content:    fmt.Sprintf("Error: tool not found: %s", tc.Name),
+					ToolCallID: tc.ID,
+				})
+				continue
+			}
+
+			result, err := executor.ExecuteTool(ctx, *tool, tc)
+			if err != nil {
+				result = fmt.Sprintf("Error executing tool: %v", err)
+			}
+
+			messages = append(messages, model.Message{
+				Role:       "tool",
+				Content:    result,
+				ToolCallID: tc.ID,
+			})
+		}
 	}
 
-	return &respData, nil
+	return nil, fmt.Errorf("max tool call iterations exceeded")
+}
+
+func (c *chatCompletionsClient) findToolByName(name string) *model.MCPTool {
+	for i := range c.tools {
+		if c.tools[i].ServerLabel == name {
+			return &c.tools[i]
+		}
+	}
+	return nil
 }
 
 func (c *chatCompletionsClient) ChatCompletionsWithContent(ctx context.Context, contentParts []model.ChatCompletionsContentPart) (*model.ChatCompletionsResponse, error) {
@@ -127,7 +110,6 @@ func (c *chatCompletionsClient) ChatCompletionsWithContent(ctx context.Context, 
 		Role:    "user",
 		Content: contentParts,
 	}
-
 	messages := []model.Message{reqMessage}
 	return c.ChatCompletions(ctx, messages)
 }
@@ -141,5 +123,124 @@ func (c *chatCompletionsClient) OpenResponsesWithContent(ctx context.Context, co
 }
 
 func (c *chatCompletionsClient) GetTimeout() time.Duration {
-	return c.timeout
+	return 0
+}
+
+func convertModelMessageToSDK(msg model.Message) *openai.ChatCompletionMessageParamUnion {
+	content := msg.Content
+
+	if parts, ok := content.([]model.ChatCompletionsContentPart); ok && len(parts) > 0 {
+		contentParts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(parts))
+		for _, part := range parts {
+			if part.Type == "text" {
+				contentParts = append(contentParts, openai.TextContentPart(part.Text))
+			} else if part.Type == "image_url" && part.ImageURL != nil {
+				contentParts = append(contentParts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+					URL:    part.ImageURL.URL,
+					Detail: part.ImageURL.Detail,
+				}))
+			}
+		}
+		if len(contentParts) > 0 {
+			msg := openai.UserMessage(contentParts)
+			return &msg
+		}
+	}
+
+	contentStr, ok := content.(string)
+	if !ok {
+		return nil
+	}
+
+	switch msg.Role {
+	case "user":
+		msg := openai.UserMessage(contentStr)
+		return &msg
+	case "assistant":
+		msg := openai.AssistantMessage(contentStr)
+		return &msg
+	case "system":
+		msg := openai.SystemMessage(contentStr)
+		return &msg
+	case "developer":
+		msg := openai.DeveloperMessage(contentStr)
+		return &msg
+	case "tool":
+		toolMsg := openai.ToolMessage(contentStr, msg.ToolCallID)
+		return &toolMsg
+	default:
+		msg := openai.UserMessage(contentStr)
+		return &msg
+	}
+}
+
+func convertMCPToolsToSDKChat(tools []model.MCPTool) []openai.ChatCompletionToolUnionParam {
+	if len(tools) == 0 {
+		return nil
+	}
+
+	sdkTools := make([]openai.ChatCompletionToolUnionParam, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Type == "mcp" {
+			sdkTools = append(sdkTools, openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+				Name:        tool.ServerLabel,
+				Description: openai.String(fmt.Sprintf("MCP: %s (%s)", tool.ServerLabel, tool.ServerURL)),
+				Parameters: openai.FunctionParameters{
+					"type": "object",
+				},
+			}))
+		}
+	}
+	return sdkTools
+}
+
+func convertSDKChatCompletionToModel(resp *openai.ChatCompletion) *model.ChatCompletionsResponse {
+	if resp == nil {
+		return nil
+	}
+
+	modelResp := &model.ChatCompletionsResponse{
+		ID:      resp.ID,
+		Object:  string(resp.Object),
+		Created: resp.Created,
+		Model:   resp.Model,
+	}
+
+	if len(resp.Choices) > 0 {
+		modelResp.Choices = make([]model.Choice, 0, len(resp.Choices))
+		for _, choice := range resp.Choices {
+			modelChoice := model.Choice{
+				Index:        int(choice.Index),
+				FinishReason: string(choice.FinishReason),
+			}
+			if choice.Message.Content != "" {
+				modelChoice.Message = model.Message{
+					Role:    string(choice.Message.Role),
+					Content: choice.Message.Content,
+				}
+			}
+			if choice.FinishReason == "tool_calls" && len(choice.Message.ToolCalls) > 0 {
+				tc := make([]model.ToolCall, 0, len(choice.Message.ToolCalls))
+				for _, toolCall := range choice.Message.ToolCalls {
+					tc = append(tc, model.ToolCall{
+						ID:        toolCall.ID,
+						Name:      toolCall.Function.Name,
+						Arguments: toolCall.Function.Arguments,
+					})
+				}
+				modelChoice.ToolCalls = tc
+			}
+			modelResp.Choices = append(modelResp.Choices, modelChoice)
+		}
+	}
+
+	if resp.Usage.PromptTokens > 0 || resp.Usage.CompletionTokens > 0 || resp.Usage.TotalTokens > 0 {
+		modelResp.Usage = model.Usage{
+			InputTokens:  int(resp.Usage.PromptTokens),
+			OutputTokens: int(resp.Usage.CompletionTokens),
+			TotalTokens:  int(resp.Usage.TotalTokens),
+		}
+	}
+
+	return modelResp
 }
