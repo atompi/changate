@@ -17,7 +17,7 @@ type Client interface {
 	GetTimeout() time.Duration
 }
 
-func NewClient(baseURL, apiPath, model, token, user, conversation string, timeout time.Duration, maxRetries int, retryBaseDelay time.Duration, agentType string, tools []model.MCPTool) Client {
+func NewClient(baseURL, apiPath, model, token, user, conversation string, timeout time.Duration, maxRetries int, retryBaseDelay time.Duration, agentType string, systemPrompt string, tools []model.MCPTool) Client {
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
@@ -46,7 +46,7 @@ func NewClient(baseURL, apiPath, model, token, user, conversation string, timeou
 	)
 
 	if agentType == "ChatCompletions" {
-		return newChatCompletionsClient(sdkClient, apiPath, model, tools)
+		return newChatCompletionsClient(sdkClient, apiPath, model, systemPrompt, tools)
 	}
-	return newOpenResponsesClient(sdkClient, apiPath, model, tools)
+	return newOpenResponsesClient(sdkClient, apiPath, model, systemPrompt, tools)
 }

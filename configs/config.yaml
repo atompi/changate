@@ -1,24 +1,18 @@
 server:
-  mode: debug
+  mode: "release"
   host: "0.0.0.0"
-  port: 8081
+  port: 8080
   read_timeout: 30s
   write_timeout: 30s
 
 log:
-  level: "debug"
+  level: "info"
   format: "console"
   path: "logs/changate"
-  multi_files: true
+  multi_files: false
 
 etcd:
   endpoints:
-    - "https://127.0.0.1:23790"
-    - "https://127.0.0.1:23791"
-    - "https://127.0.0.1:23792"
+    - "http://etcd:2379"
   timeout: 5s
-  ca_file: "./ssl/etcd/ca.pem"
-  cert_file: "./ssl/etcd/client.pem"
-  key_file: "./ssl/etcd/client-key.pem"
-  insecure_skip_verify: false
   root_path: "/changate"

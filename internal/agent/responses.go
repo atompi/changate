@@ -12,22 +12,24 @@ import (
 )
 
 type responsesClient struct {
-	sdkClient openai.Client
-	model     string
-	tools     []model.MCPTool
+	sdkClient    openai.Client
+	model        string
+	systemPrompt string
+	tools        []model.MCPTool
 }
 
-func newOpenResponsesClient(sdkClient openai.Client, apiPath, model string, tools []model.MCPTool) *responsesClient {
+func newOpenResponsesClient(sdkClient openai.Client, apiPath, model string, systemPrompt string, tools []model.MCPTool) *responsesClient {
 	return &responsesClient{
-		sdkClient: sdkClient,
-		model:     model,
-		tools:     tools,
+		sdkClient:    sdkClient,
+		model:        model,
+		systemPrompt: systemPrompt,
+		tools:        tools,
 	}
 }
 
 func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Message) (*model.OpenResponsesResponse, error) {
-	maxIterations := 10
-	executor := NewMCPToolExecutor(30 * time.Second)
+	maxIterations := 1000
+	executor := NewMCPToolExecutor(300 * time.Second)
 	var previousResponseID string
 	var isFirstCall = true
 
@@ -36,6 +38,18 @@ func (c *responsesClient) OpenResponses(ctx context.Context, messages []model.Me
 
 		if isFirstCall {
 			sdkInput = make([]responses.ResponseInputItemUnionParam, 0, len(messages))
+			if c.systemPrompt != "" {
+				sdkInput = append(sdkInput, responses.ResponseInputItemParamOfMessage(
+					responses.ResponseInputMessageContentListParam{
+						responses.ResponseInputContentUnionParam{
+							OfInputText: &responses.ResponseInputTextParam{
+								Text: c.systemPrompt,
+							},
+						},
+					},
+					responses.EasyInputMessageRoleSystem,
+				))
+			}
 			for _, msg := range messages {
 				input := convertModelMessageToSDKResponse(msg)
 				if input.OfMessage != nil {

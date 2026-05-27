@@ -59,6 +59,7 @@ type AgentConfig struct {
 	Conversation   string        `json:"conversation"`
 	MaxRetries     int           `json:"max_retries"`
 	RetryBaseDelay time.Duration `json:"retry_base_delay"`
+	SystemPrompt   string        `json:"system_prompt"`
 	Tools          []MCPConfig   `json:"tools"`
 }
 

@@ -10,25 +10,30 @@ import (
 )
 
 type chatCompletionsClient struct {
-	sdkClient openai.Client
-	model     string
-	tools     []model.MCPTool
+	sdkClient    openai.Client
+	model        string
+	systemPrompt string
+	tools        []model.MCPTool
 }
 
-func newChatCompletionsClient(sdkClient openai.Client, apiPath, model string, tools []model.MCPTool) *chatCompletionsClient {
+func newChatCompletionsClient(sdkClient openai.Client, apiPath, model string, systemPrompt string, tools []model.MCPTool) *chatCompletionsClient {
 	return &chatCompletionsClient{
-		sdkClient: sdkClient,
-		model:     model,
-		tools:     tools,
+		sdkClient:    sdkClient,
+		model:        model,
+		systemPrompt: systemPrompt,
+		tools:        tools,
 	}
 }
 
 func (c *chatCompletionsClient) ChatCompletions(ctx context.Context, messages []model.Message) (*model.ChatCompletionsResponse, error) {
-	maxIterations := 10
-	executor := NewMCPToolExecutor(30 * time.Second)
+	maxIterations := 1000
+	executor := NewMCPToolExecutor(300 * time.Second)
 
 	for i := 0; i < maxIterations; i++ {
-		sdkMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+		sdkMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+1)
+		if c.systemPrompt != "" {
+			sdkMessages = append(sdkMessages, openai.SystemMessage(c.systemPrompt))
+		}
 		for _, msg := range messages {
 			sdkMsg := convertModelMessageToSDK(msg)
 			if sdkMsg != nil {

@@ -272,7 +272,7 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 			}
 		}
 		agentClient := h.agentCache.GetOrCreate(context.Background(), key, app, func(cfg *config.AppConfig) agent.Client {
-			return agent.NewClient(cfg.Agent.BaseURL, cfg.Agent.APIPath, cfg.Agent.Model, cfg.Agent.Token, cfg.Agent.User, cfg.Agent.Conversation, agentTimeout, agentMaxRetries, agentRetryBaseDelay, cfg.Agent.Type, tools)
+			return agent.NewClient(cfg.Agent.BaseURL, cfg.Agent.APIPath, cfg.Agent.Model, cfg.Agent.Token, cfg.Agent.User, cfg.Agent.Conversation, agentTimeout, agentMaxRetries, agentRetryBaseDelay, cfg.Agent.Type, cfg.Agent.SystemPrompt, tools)
 		})
 
 		app1Ctx, app1Cancel := context.WithTimeout(context.Background(), appTimeout)

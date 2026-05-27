@@ -8,3 +8,32 @@ services:
       - "8080:8080"
     volumes:
       - ./config.yaml:/app/config.yaml
+      - changate_logs:/app/logs
+  etcd:
+    image: quay.io/coreos/etcd:v3.6.11
+    restart: unless-stopped
+    volumes:
+      - etcd_data:/etcd-data
+    command:
+      - /usr/local/bin/etcd
+      - --data-dir=/etcd-data
+      - --name=etcd
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-cluster=etcd=http://etcd:2380
+
+volumes:
+  changate_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: $PWD/data/logs
+  etcd_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: $PWD/data/etcd
