@@ -1,99 +1,96 @@
 # Changate
 
-通知通道网关 (Channel Gateway)。
+Channel Gateway for Feishu (Lark) and AI Agent Services.
 
-## 概述
+## Overview
 
-Changate 是一个连接飞书（Feishu/Lark）应用与 AI Agent 服务的通道网关。它接收飞书应用的消息回调，将消息转发给后端 AI Agent（支持 Hermes 和 OpenClaw），并把 Agent 的响应发送回飞书。
+Changate acts as a bridge between Feishu (Lark) applications and AI Agent services. It receives message callbacks from Feishu, forwards them to backend AI Agents (via LiteLLM proxy), and sends the Agent responses back to Feishu.
 
 ```mermaid
 flowchart LR
     A["Feishu/<br/>Lark"]
     B["Changate"]
-	C["AI engine"]
-    A -->|POST /feishu/app1| B
+    C["LiteLLM<br/>Proxy"]
+    A -->|POST /feishu/:app| B
     B -->|response| A
-	B -->|async<br/>POST /v1/responses| C
-	C -->|response| B
+    B -->|async<br/>POST /v1/responses or /v1/chat/completions| C
+    C -->|response| B
 ```
 
-## 功能特性
+## Features
 
-- **ETCD 配置管理**：通过 ETCD 集中管理多 app 配置，支持 per-user agent 覆盖
-- **多 Agent 支持**：支持通过 model 配置选择 Hermes 或 OpenClaw Agent
-- **消息加密**：支持 AES-256-CBC 加密回调内容
-- **签名验证**：支持 HMAC-SHA256 签名验证请求合法性
-- **异步处理**：Agent 请求异步执行，避免飞书回调超时
-- **会话保持**：支持配置 `user` 参数实现稳定的 Agent 会话
-- **图片处理**：支持下载飞书消息中的图片，base64 编码后发送给 Agent
-- **文件回复**：支持 Agent 返回本地文件路径，上传至飞书发送
-- **Agent 客户端缓存**：LRU+TTL 缓存减少重复创建开销
+- **ETCD Configuration Management**: Centralized multi-app configuration via ETCD with per-user agent override support
+- **Multi-Agent Support**: Supports both OpenResponses and ChatCompletions API types via LiteLLM proxy
+- **Message Encryption**: AES-256-CBC encryption for callback content
+- **Signature Verification**: HMAC-SHA256 signature validation
+- **Async Processing**: Agent requests executed asynchronously to prevent Feishu callback timeout
+- **Session Persistence**: Configure `user` parameter for stable Agent sessions
+- **Image Processing**: Download Feishu images, base64 encode, and send to Agent
+- **File Reply**: Upload local files from Agent response (`MEDIA:/path/to/file`) to Feishu
+- **Agent Client Caching**: LRU+TTL cache to reduce repeated creation overhead
+- **MCP Tools**: Pass MCP server information to LiteLLM proxy via `tools` configuration
+- **Retry Logic**: Exponential backoff retry for transient network failures and 5xx errors
 
-## 技术栈
+## Tech Stack
 
-- **语言**：Golang 1.26+
-- **框架**：Gin Web 框架
-- **配置**：Viper 配置管理
-- **命令行**：Cobra CLI 工具
+- **Language**: Go 1.26+
+- **Framework**: Gin Web Framework
+- **Configuration**: Viper
 
-## 项目结构
+## Project Structure
 
 ```
 changate/
 ├── cmd/
 │   └── server/
-│       └── main.go           # 程序入口
-├── config/
-│   └── config.yaml           # 配置文件
+│       └── main.go               # Entry point
 ├── internal/
 │   ├── agent/
-│   │   └── responses.go     # Agent 客户端实现
+│   │   ├── client.go             # Client interface + NewClient factory
+│   │   └── agent_http.go         # Unified HTTP client + builders
 │   ├── config/
-│   │   ├── config.go        # 配置加载
-│   │   └── etcd_loader.go  # ETCD 配置加载器
+│   │   ├── config.go              # Config structs + Load function
+│   │   └── etcd_loader.go        # ETCD config loader
 │   ├── etcd/
-│   │   └── client.go       # ETCD 客户端
+│   │   └── client.go              # ETCD client
 │   ├── feishu/
-│   │   └── client.go        # 飞书 API 客户端
+│   │   └── client.go              # Feishu API client
 │   ├── handler/
-│   │   ├── callback.go      # 回调处理逻辑
-│   │   └── agent_cache.go   # Agent 客户端缓存
+│   │   ├── callback.go            # Callback handling logic
+│   │   └── agent_cache.go         # Agent client cache
 │   ├── model/
-│   │   ├── agent.go         # Agent 响应模型
-│   │   └── event.go         # 事件数据模型
+│   │   ├── agent.go               # Agent response models
+│   │   └── event.go               # Event data models
 │   └── router/
-│       └── router.go         # 路由设置
+│       └── router.go             # Gin router setup
 └── pkg/
     ├── crypto/
-    │   └── aes.go            # AES 加解密工具
+    │   └── aes.go                 # AES encryption/decryption
     ├── logger/
-    │   └── logger.go         # 日志工具
+    │   └── logger.go              # Structured logging
     └── retry/
-        └── retry.go          # 重试工具
+        └── retry.go               # Retry logic
 ```
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Requirements
 
-- Golang 1.26+
-- 飞书应用（已开启机器人功能）
-- Hermes Agent 或 OpenClaw Gateway
+- Go 1.26+
+- Feishu App (with Bot enabled)
+- LiteLLM Proxy (supporting `/v1/responses` or `/v1/chat/completions`)
 
-### 安装构建
+### Build
 
 ```bash
-# 克隆项目
 git clone https://github.com/atompi/changate.git
 cd changate
-
-# 构建
 go build -o changate ./cmd/server
 ```
 
-### 配置
+### Configuration
 
-编辑 `config/config.yaml`：
+Edit `config/config.yaml`:
 
 ```yaml
 server:
@@ -102,38 +99,23 @@ server:
   read_timeout: 30s
   write_timeout: 30s
 
-log_level: "info"
+log_level: "debug"
 
 etcd:
   endpoints:
-    - "http://127.0.0.1:23790"
-    - "http://127.0.0.1:23791"
-    - "http://127.0.0.1:23792"
+    - "http://127.0.0.1:2379"
   timeout: 5s
   root_path: "/changate"
 ```
 
-#### 配置说明
+#### ETCD Configuration Structure
 
-**Server 配置**：
-- `host` / `port`：服务监听地址
-- `read_timeout` / `write_timeout`：HTTP 超时时间
+| Path | Description |
+|------|-------------|
+| `/changate/<app_name>` | App-level config (enabled + default agent) |
+| `/changate/<app_name>/<user_id>` | User-level config (enabled + agent override) |
 
-**ETCD 配置**：
-- `endpoints`：ETCD 集群节点地址列表
-- `timeout`：ETCD 操作超时时间
-- `root_path`：配置根路径（默认 `/changate`）
-
-#### ETCD 配置结构
-
-配置存储在 ETCD 中，路径结构如下：
-
-| 路径 | 说明 |
-|------|------|
-| `/changate/<app_name>` | App 级配置（enabled + default agent） |
-| `/changate/<app_name>/<user_id>` | User 级配置（enabled + agent 覆盖） |
-
-**App 配置示例**：
+**App Config Example**:
 ```json
 {
   "enabled": true,
@@ -143,249 +125,185 @@ etcd:
   "verify_token": "xxxxxxxx",
   "feishu_base_url": "https://open.feishu.cn",
   "max_concurrent": 100,
+  "timeout": 120,
   "agent": {
-    "type": "ChatCompletions",    // ChatCompletions or OpenResponses
-    "base_url": "http://127.0.0.1:8642",
-    "api_path": "/v1/responses",
+    "type": "ChatCompletions",
+    "base_url": "https://litellm-proxy.example.com",
+    "api_path": "/v1/chat/completions",
     "timeout": 3600,
-    "model": "hermes-agent",
-    "token": "xxxxxxxx",
-    "user": "default"
+    "max_retries": 3,
+    "retry_base_delay": "100ms",
+    "model": "sf/Qwen/Qwen3-30B-A3B",
+    "token": "sk-xxxxxxxx",
+    "user": "default",
+    "system_prompt": "",
+    "tools": [
+      {
+        "type": "mcp",
+        "server_url": "litellm_proxy/mcp/wiki_mcp",
+        "server_label": "wiki_search",
+        "require_approval": "never"
+      }
+    ]
   }
 }
 ```
 
-**User 配置示例**：
+**User Config Example**:
 ```json
 {
   "enabled": true,
   "agent": {
-    "type": "ChatCompletions",    // ChatCompletions or OpenResponses
-    "base_url": "http://127.0.0.1:18789",
-    "model": "openclaw/default",
-    "token": "xxxxxxxx",
-    "user": "bob"
+    "type": "OpenResponses",
+    "base_url": "https://litellm-proxy.example.com",
+    "max_retries": 3,
+    "retry_base_delay": "100ms",
+    "model": "minimax/MiniMax-M2.7",
+    "token": "sk-xxxxxxxx",
+    "user": "bob",
+    "tools": [
+      {
+        "type": "mcp",
+        "server_url": "litellm_proxy/mcp/wiki_mcp",
+        "server_label": "wiki",
+        "require_approval": "never"
+      }
+    ]
   }
 }
 ```
 
-### 运行
+### Run
 
 ```bash
-# 指定配置文件启动
 ./changate server --config config/config.yaml
-
-# 默认使用 config/config.yaml
-./changate server
 ```
 
-### 飞书应用配置
+### Feishu App Setup
 
-1. 在飞书开放平台创建应用，启用机器人功能
-2. 配置事件订阅：
-   - 勾选 `im.message.receive_v1`（接收消息）
-   - 设置请求地址为 `https://your-domain.com/feishu/app1`
-3. 配置好回调地址后，飞书会发送 URL 验证请求
+1. Create a Feishu app and enable Bot functionality
+2. Configure event subscription:
+   - Enable `im.message.receive_v1` (receive messages)
+   - Set callback URL to `https://your-domain.com/feishu/app1`
 
-## API 接口
+## API Endpoints
 
-### 回调接口
+### Callback
 
 ```
 POST /feishu/:appName
 ```
 
-接收飞书应用的消息回调。
+Receives Feishu message callbacks.
 
-**请求头**：
-- `X-Lark-Signature`：HMAC-SHA256 签名
-- `X-Lark-Request-Timestamp`：时间戳
+**Headers**:
+- `X-Lark-Signature`: HMAC-SHA256 signature
+- `X-Lark-Request-Timestamp`: Timestamp
 
-**请求体**：
-```json
-{
-  "schema": "2.0",
-  "header": {
-    "event_id": "5e3702a84e847582be8db7fb73283c02",
-    "event_type": "im.message.receive_v1",
-    "create_time": "1608725989000",
-    "token": "rvaYgkND1GOiu5MM0E1rncYC6PLtF7JV",
-    "app_id": "cli_9f5343c580712544",
-    "tenant_key": "2ca1d211f64f6438"
-  },
-  "event": {
-    "sender": {
-      "sender_id": {
-        "union_id": "on_8ed6aa67826108097d9ee143816345",
-        "user_id": "e33ggbyz",
-        "open_id": "ou_84aad35d084aa403a838cf73ee18467"
-      },
-      "sender_type": "user",
-      "tenant_key": "736588c9260f175e"
-    },
-    "message": {
-      "message_id": "om_5ce6d572455d361153b7cb51da133945",
-      "root_id": "om_5ce6d572455d361153b7cb5xxfsdfsdfdsf",
-      "parent_id": "om_5ce6d572455d361153b7cb5xxfsdfsdfdsf",
-      "create_time": "1609073151345",
-      "chat_id": "oc_5ce6d572455d361153b7xx51da133945",
-      "chat_type": "group",
-      "message_type": "text",
-      "content": "{\"text\":\"hello\"}",
-      "mentions": []
-    }
-  }
-}
-```
+**Response**:
+- URL verification: `{"challenge": "xxx"}`
+- Message handling: `{"code": 0}`
 
-**响应**：
-- URL 验证：返回 `{"challenge": "xxx"}`
-- 消息处理：返回 `{"code": 0}`
-
-### 健康检查
+### Health Check
 
 ```
 GET /health
 ```
 
-返回服务健康状态。
+Returns `{"status": "ok"}`.
 
-**响应**：
-```json
-{"status": "ok"}
-```
+## LiteLLM Proxy API
 
-## 消息处理流程
-
-### 文本消息
-
-1. **接收回调**：Changate 接收飞书回调请求
-2. **解密验证**：如果配置了加密密钥，解密请求体并验证签名
-3. **解析消息**：解析事件类型，提取消息内容和消息 ID
-4. **异步处理**：
-   - 将文本内容序列化为 Agent API 格式
-   - Agent 返回响应后，发送文本回复给飞书用户
-5. **立即响应**：收到回调后立即返回 `{"code": 0}`，避免超时
-
-### 图片消息
-
-1. **接收回调**：接收到包含 `message_type: "image"` 的消息
-2. **解析图片**：提取 `image_key`
-3. **下载图片**：调用飞书消息资源下载接口 `GET /open-apis/im/v1/messages/{message_id}/resources/{file_key}?type=image`
-4. **Base64 编码**：将图片数据编码为 `data:image/png;base64,...` 格式
-5. **发送给 Agent**：序列化为 `{"type": "input_image", "image_url": "data:image/png;base64,..."}`
-6. **处理响应**：Agent 可能返回文本或本地文件路径
-
-### 文件回复
-
-当 Agent 响应包含 `MEDIA:/path/to/file.png` 格式的文本时：
-
-1. 提取文件路径
-2. 读取本地文件
-3. 上传至飞书：`POST /open-apis/im/v1/files`（multipart/form-data）
-4. 发送文件消息给飞书用户
-
-## 安全机制
-
-### 加密回调
-
-如果飞书配置了「使用加密」，请求体会包含 `encrypt` 字段：
+### Chat Completions API
 
 ```json
 {
-  "encrypt": "base64 编码的加密内容"
-}
-```
-
-Changate 使用 AES-256-CBC 解密。配置 `encrypt_key` 启用。
-
-### 签名验证
-
-飞书回调会携带 `X-Lark-Signature` 和 `X-Lark-Request-Timestamp` 头。Changate 使用 HMAC-SHA256 验证：
-
-```
-signature = HMAC-SHA256(encryptKey, timestamp + body)
-```
-
-### Token 验证
-
-如果配置了 `verify_token`，Changate 会验证请求中的 `token` 字段。
-
-## Agent 接口
-
-### Hermes Agent
-
-请求格式（使用 `/v1/responses` API）：
-
-```json
-{
-  "model": "hermes-agent",
-  "input": [
-    {"role": "user", "content": "用户消息"}
+  "model": "sf/Qwen/Qwen3-30B-A3B",
+  "messages": [
+    {"role": "user", "content": [
+        {"type": "text", "text": "user message"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,...", "detail": "original"}}
+    ]}
+  ],
+  "tools": [
+    {
+      "type": "mcp",
+      "server_url": "litellm_proxy/mcp/wiki_mcp",
+      "server_label": "wiki_search",
+      "require_approval": "never"
+    }
   ],
   "user": "user-identifier",
   "stream": false
 }
 ```
 
-### OpenClaw Gateway
-
-请求格式（使用 `/v1/responses` API）：
+### Responses API
 
 ```json
 {
-  "model": "openclaw/default",
+  "model": "minimax/MiniMax-M2.7",
   "input": [
-    {"role": "user", "content": [{"type": "text", "text": "用户消息"}]}
+    {"role": "user", "content": [
+        {"type": "input_text", "text": "user message"},
+        {"type": "input_image", "image_url": "data:image/png;base64,..."}
+    ]}
+  ],
+  "tools": [
+    {
+      "type": "mcp",
+      "server_url": "litellm_proxy/mcp/wiki_mcp",
+      "server_label": "wiki",
+      "require_approval": "never"
+    }
   ],
   "user": "user-identifier",
-  "stream": false
+  "stream": false,
+  "tool_choice": "required"
 }
 ```
 
-OpenClaw 支持 content parts 格式，支持多模态内容（文本 + 图片）。
+## Message Processing
 
-### Agent 图片格式
+### Text Messages
 
-发送给 Agent 的图片格式：
+1. **Receive callback**: Changate receives Feishu callback
+2. **Decrypt & Verify**: Decrypt body and verify signature if `encrypt_key` configured
+3. **Parse message**: Extract content and message ID
+4. **Async processing**:
+   - Serialize content to Agent API format
+   - Send reply to Feishu user after Agent responds
+5. **Immediate response**: Return `{"code": 0}` immediately to avoid timeout
 
-```json
-{
-  "role": "user",
-  "content": [
-    {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KG..."}
-  ]
-}
-```
+### Image Messages
 
-### Agent 文件路径响应
+1. **Receive callback**: Extract `image_key`
+2. **Download image**: `GET /open-apis/im/v1/messages/{message_id}/resources/{file_key}?type=image`
+3. **Base64 encode**: Convert to `data:image/png;base64,...`
+4. **Send to Agent**: `{"type": "input_image", "image_url": "data:image/png;base64,..."}`
 
-当 Agent 返回包含 `MEDIA:` 前缀的文本时，系统会提取文件路径：
+### File Reply
 
-```
-MEDIA:/opt/data/cache/screenshots/browser_screenshot_xxx.png
-```
+When Agent response contains `MEDIA:/path/to/file.png`:
 
-系统会读取该文件并上传至飞书。
+1. Extract file path
+2. Read local file
+3. Upload to Feishu: `POST /open-apis/im/v1/files` (multipart/form-data)
+4. Send file message to user
 
-## 日志
+## Logging
 
-Changate 使用结构化日志，支持以下级别：
+Structured logging with levels:
 
-- `debug`：详细调试信息（包含请求/响应体）
-- `info`：一般信息
-- `warn`：警告信息
-- `error`：错误信息
+- `debug`: Request/response bodies (when `log_level: debug`)
+- `info`: General information
+- `warn`: Warning information (includes retry attempts)
+- `error`: Error information
 
-日志级别通过 `log_level` 配置项设置。
-
-## 测试
+## Testing
 
 ```bash
-# 运行所有测试
 go test ./...
-
-# 运行测试并显示覆盖率
 go test -cover ./...
 ```
 

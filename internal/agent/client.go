@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/atompi/changate/internal/config"
 	"github.com/atompi/changate/internal/model"
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
 )
 
 type Client interface {
@@ -17,16 +16,9 @@ type Client interface {
 	GetTimeout() time.Duration
 }
 
-func NewClient(baseURL, apiPath, model, token, user, conversation string, timeout time.Duration, maxRetries int, retryBaseDelay time.Duration, agentType string, systemPrompt string, tools []model.MCPTool) Client {
+func NewClient(baseURL, apiPath, model, token, user string, timeout time.Duration, maxRetries int, retryBaseDelay time.Duration, agentType string, systemPrompt string, tools []config.MCPConfig) Client {
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
-	}
-	if apiPath == "" {
-		if agentType == "ChatCompletions" {
-			apiPath = "/v1/chat/completions"
-		} else {
-			apiPath = "/v1/responses"
-		}
 	}
 	if timeout == 0 {
 		timeout = 3600 * time.Second
@@ -38,15 +30,12 @@ func NewClient(baseURL, apiPath, model, token, user, conversation string, timeou
 		retryBaseDelay = 100 * time.Millisecond
 	}
 
-	sdkClient := openai.NewClient(
-		option.WithBaseURL(baseURL),
-		option.WithAPIKey(token),
-		option.WithMaxRetries(maxRetries),
-		option.WithRequestTimeout(timeout),
-	)
-
+	var builder requestBuilder
 	if agentType == "ChatCompletions" {
-		return newChatCompletionsClient(sdkClient, apiPath, model, systemPrompt, tools)
+		builder = &chatCompletionsBuilder{}
+	} else {
+		builder = &responsesBuilder{}
 	}
-	return newOpenResponsesClient(sdkClient, apiPath, model, systemPrompt, tools)
+
+	return newAgentHTTPClient(baseURL, apiPath, model, token, user, systemPrompt, tools, timeout, maxRetries, retryBaseDelay, builder)
 }

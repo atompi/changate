@@ -259,20 +259,8 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 		}
 
 		key := cacheKey{appName: appName, userID: userID}
-		tools := make([]model.MCPTool, 0, len(app.Agent.Tools))
-		for _, t := range app.Agent.Tools {
-			if t.Enabled {
-				tools = append(tools, model.MCPTool{
-					Type:            "mcp",
-					ServerURL:       t.ServerURL,
-					ServerLabel:     t.ServerLabel,
-					RequireApproval: t.RequireApproval,
-					Token:           t.Token,
-				})
-			}
-		}
 		agentClient := h.agentCache.GetOrCreate(context.Background(), key, app, func(cfg *config.AppConfig) agent.Client {
-			return agent.NewClient(cfg.Agent.BaseURL, cfg.Agent.APIPath, cfg.Agent.Model, cfg.Agent.Token, cfg.Agent.User, cfg.Agent.Conversation, agentTimeout, agentMaxRetries, agentRetryBaseDelay, cfg.Agent.Type, cfg.Agent.SystemPrompt, tools)
+			return agent.NewClient(cfg.Agent.BaseURL, cfg.Agent.APIPath, cfg.Agent.Model, cfg.Agent.Token, userID, agentTimeout, agentMaxRetries, agentRetryBaseDelay, cfg.Agent.Type, cfg.Agent.SystemPrompt, cfg.Agent.Tools)
 		})
 
 		app1Ctx, app1Cancel := context.WithTimeout(context.Background(), appTimeout)

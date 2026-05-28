@@ -6,10 +6,9 @@ import (
 )
 
 type Message struct {
-	Role       string     `json:"role"`
-	Content    any        `json:"content"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	Role             string `json:"role"`
+	Content          any    `json:"content"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
 }
 
 type Content struct {
@@ -24,31 +23,24 @@ type ContentPart struct {
 }
 
 type OpenResponsesResponse struct {
-	ID              string   `json:"id"`
-	Object          string   `json:"object"`
-	Status          string   `json:"status"`
-	CreatedAt       int64    `json:"created_at"`
-	Model           string   `json:"model"`
-	Output          []Output `json:"output"`
-	Usage           Usage    `json:"usage"`
-	MaxOutputTokens int      `json:"max_output_tokens"`
+	ID        string   `json:"id"`
+	Status    string   `json:"status"`
+	CreatedAt int64    `json:"created_at"`
+	Model     string   `json:"model"`
+	Output    []Output `json:"output"`
+	Usage     Usage    `json:"usage"`
 }
 
 type Output struct {
 	Type      string    `json:"type"`
-	Name      string    `json:"name"`
-	Arguments string    `json:"arguments"`
-	CallId    string    `json:"call_id"`
-	Output    string    `json:"output"`
 	Role      string    `json:"role"`
 	Content   []Content `json:"content"`
 }
 
 type Choice struct {
-	Index        int        `json:"index"`
-	Message      Message    `json:"message"`
-	FinishReason string     `json:"finish_reason"`
-	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string `json:"finish_reason"`
 }
 
 type ChatCompletionsResponse struct {
@@ -140,58 +132,4 @@ func (r *ChatCompletionsResponse) GetFilePath() string {
 	return ""
 }
 
-type MCPTool struct {
-	Type            string `json:"type"`
-	ServerURL       string `json:"server_url"`
-	ServerLabel     string `json:"server_label"`
-	RequireApproval string `json:"require_approval"`
-	Token           string `json:"token"`
-}
 
-type ToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-}
-
-func (r *OpenResponsesResponse) HasToolCalls() bool {
-	for _, output := range r.Output {
-		if output.Type == "function_call" || output.Type == "mcp_call" {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *OpenResponsesResponse) GetToolCalls() []ToolCall {
-	calls := make([]ToolCall, 0, len(r.Output))
-	for _, output := range r.Output {
-		if output.Type == "function_call" || output.Type == "mcp_call" {
-			calls = append(calls, ToolCall{
-				ID:        output.CallId,
-				Name:      output.Name,
-				Arguments: output.Arguments,
-			})
-		}
-	}
-	return calls
-}
-
-func (r *ChatCompletionsResponse) HasToolCalls() bool {
-	for _, choice := range r.Choices {
-		if choice.FinishReason == "tool_calls" {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *ChatCompletionsResponse) GetToolCalls() []ToolCall {
-	calls := make([]ToolCall, 0)
-	for _, choice := range r.Choices {
-		if choice.FinishReason == "tool_calls" && len(choice.ToolCalls) > 0 {
-			calls = append(calls, choice.ToolCalls...)
-		}
-	}
-	return calls
-}

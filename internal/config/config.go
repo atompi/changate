@@ -40,14 +40,6 @@ type EtcdConfig struct {
 	RootPath           string        `mapstructure:"root_path"`
 }
 
-type MCPConfig struct {
-	Enabled         bool   `json:"enabled"`
-	ServerURL       string `json:"server_url"`
-	ServerLabel     string `json:"server_label"`
-	RequireApproval string `json:"require_approval"`
-	Token           string `json:"token"`
-}
-
 type AgentConfig struct {
 	Type           string        `json:"type"`
 	BaseURL        string        `json:"base_url"`
@@ -56,11 +48,17 @@ type AgentConfig struct {
 	Model          string        `json:"model"`
 	Token          string        `json:"token"`
 	User           string        `json:"user"`
-	Conversation   string        `json:"conversation"`
 	MaxRetries     int           `json:"max_retries"`
 	RetryBaseDelay time.Duration `json:"retry_base_delay"`
 	SystemPrompt   string        `json:"system_prompt"`
 	Tools          []MCPConfig   `json:"tools"`
+}
+
+type MCPConfig struct {
+	Type            string `json:"type"`
+	ServerURL       string `json:"server_url"`
+	ServerLabel     string `json:"server_label"`
+	RequireApproval string `json:"require_approval"`
 }
 
 // AppConfig is the configuration stored at /changate/<app_name>

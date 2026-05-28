@@ -18,7 +18,7 @@ model/
 | `MessageEvent` | struct | 飞书消息事件 |
 | `EventCallbackRequest` | struct | 回调请求体 |
 | `URLVerificationRequest` | struct | URL验证请求 |
-| `OpenResponsesResponse` | struct | OpenResponses响应 |
+| `OpenResponsesResponse` | struct | OpenResponses响应(ID/Status/CreatedAt/Model/Output/Usage) |
 | `ChatCompletionsResponse` | struct | ChatCompletions响应 |
 | `MessageContentPart` | struct | 消息内容部分(文本/图片) |
 | `ParseMessageContent` | func | 解析消息内容 |
@@ -37,3 +37,5 @@ model/
 - 文本消息: type="input_text", text存储内容
 - Agent响应包含MEDIA:/path/to/file时触发文件上传
 - OpenResponses使用content parts格式，ChatCompletions使用image_url格式
+- OpenResponses响应解析: 只保留type=message, role=assistant的content
+- ChatCompletions解析reasoning_content字段
