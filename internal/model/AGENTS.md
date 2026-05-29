@@ -38,4 +38,3 @@ model/
 - Agent响应包含MEDIA:/path/to/file时触发文件上传
 - OpenResponses使用content parts格式，ChatCompletions使用image_url格式
 - OpenResponses响应解析: 只保留type=message, role=assistant的content
-- ChatCompletions解析reasoning_content字段

@@ -461,9 +461,6 @@ func (b *chatCompletionsBuilder) parseResponse(body []byte) (any, error) {
 				if content, ok := msgData["content"].(string); ok {
 					msg.Content = content
 				}
-				if reasoningContent, ok := msgData["reasoning_content"].(string); ok {
-					msg.ReasoningContent = reasoningContent
-				}
 				choice.Message = msg
 			}
 			modelResp.Choices = append(modelResp.Choices, choice)

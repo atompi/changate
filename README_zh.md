@@ -224,7 +224,7 @@ GET /health
   "messages": [
     {"role": "user", "content": [
         {"type": "text", "text": "用户消息"},
-        {"type": "image_url", "image_url": {"url": "data:image/png;base64,...", "detail": "original"}}
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
     ]}
   ],
   "tools": [

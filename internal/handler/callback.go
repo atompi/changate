@@ -366,8 +366,7 @@ func processMessageContentPartsToChatCompletionsContentParts(ctx context.Context
 			processedParts = append(processedParts, model.ChatCompletionsContentPart{
 				Type: "image_url",
 				ImageURL: &model.ChatCompletionsImageURL{
-					URL:    base64Data,
-					Detail: "original",
+					URL: base64Data,
 				},
 			})
 		}

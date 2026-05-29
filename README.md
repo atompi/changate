@@ -222,7 +222,7 @@ Returns `{"status": "ok"}`.
   "messages": [
     {"role": "user", "content": [
         {"type": "text", "text": "user message"},
-        {"type": "image_url", "image_url": {"url": "data:image/png;base64,...", "detail": "original"}}
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
     ]}
   ],
   "tools": [

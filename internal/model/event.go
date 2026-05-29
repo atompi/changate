@@ -91,8 +91,7 @@ type MessageContentPart struct {
 }
 
 type ChatCompletionsImageURL struct {
-	URL    string `json:"url,omitempty"`
-	Detail string `json:"detail,omitempty"`
+	URL string `json:"url,omitempty"`
 }
 
 type ChatCompletionsContentPart struct {

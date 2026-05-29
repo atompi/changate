@@ -6,9 +6,8 @@ import (
 )
 
 type Message struct {
-	Role             string `json:"role"`
-	Content          any    `json:"content"`
-	ReasoningContent string `json:"reasoning_content,omitempty"`
+	Role    string `json:"role"`
+	Content any    `json:"content"`
 }
 
 type Content struct {
