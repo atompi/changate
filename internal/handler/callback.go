@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -20,7 +21,7 @@ import (
 	"github.com/atompi/changate/internal/feishu"
 	"github.com/atompi/changate/internal/model"
 	"github.com/atompi/changate/pkg/crypto"
-	_logger "github.com/atompi/changate/pkg/logger"
+	"github.com/atompi/changate/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -79,7 +80,7 @@ func (h *CallbackHandler) HandleCallback(c *gin.Context) {
 
 	rawBody, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		_logger.Errorf("failed to read request body: %v", err)
+		slog.Error(logger.LogFormatter("failed to read request body: %v", err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read body"})
 		return
 	}
@@ -89,7 +90,7 @@ func (h *CallbackHandler) HandleCallback(c *gin.Context) {
 	if appCfg.EncryptKey != "" {
 		body, err = h.decryptBody(rawBody, appCfg.EncryptKey)
 		if err != nil {
-			_logger.Errorf("decrypt error: %v", err)
+			slog.Error(logger.LogFormatter("decrypt error: %v", err))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "decrypt failed"})
 			return
 		}
@@ -116,7 +117,7 @@ func (h *CallbackHandler) HandleCallback(c *gin.Context) {
 	nonce := c.GetHeader("X-Lark-Request-Nonce")
 
 	if !h.verifySignature(timestamp, nonce, signature, string(rawBody), appCfg.EncryptKey) {
-		_logger.Errorf("[feishu callback] signature verification failed")
+		slog.Error(logger.LogFormatter("[feishu callback] signature verification failed"))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "signature verification failed"})
 		return
 	}
@@ -136,7 +137,7 @@ func (h *CallbackHandler) HandleCallback(c *gin.Context) {
 
 	resolvedCfg, err := h.etcdLoader.GetResolvedConfig(ctx, appName, userID)
 	if err != nil {
-		_logger.Errorf("[feishu callback] app=%s user=%s error: %v", appName, userID, err)
+		slog.Error(logger.LogFormatter("[feishu callback] app=%s user=%s error: %v", appName, userID, err))
 		errMsg := err.Error()
 		switch {
 		case strings.Contains(errMsg, "app config lookup failed"):
@@ -218,7 +219,7 @@ func (h *CallbackHandler) handleURLVerification(c *gin.Context, body []byte) {
 func (h *CallbackHandler) handleMessageEvent(c *gin.Context, app *config.AppConfig, msgEvent model.MessageEvent, appName string, userID string) {
 	contentParts, err := model.ParseMessageContent(msgEvent.Message.Content, msgEvent.Message.MessageType)
 	if err != nil {
-		_logger.Errorf("failed to parse message content: %v", err)
+		slog.Error(logger.LogFormatter("failed to parse message content: %v", err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse content"})
 		return
 	}
@@ -269,7 +270,7 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 		feishuClient := h.getFeishuClient(app)
 		tenantToken, err := feishuClient.GetTenantAccessToken(app1Ctx)
 		if err != nil {
-			_logger.Errorf("failed to get tenant access token: %v", err)
+			slog.Error(logger.LogFormatter("failed to get tenant access token: %v", err))
 			return
 		}
 
@@ -281,12 +282,12 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 		if app.Agent.Type == "ChatCompletions" {
 			chatParts, err := processMessageContentPartsToChatCompletionsContentParts(app1Ctx, contentParts, feishuClient, messageID, tenantToken)
 			if err != nil {
-				_logger.Errorf("failed to process content parts: %v", err)
+				slog.Error(logger.LogFormatter("failed to process content parts: %v", err))
 				return
 			}
 			chatResp, err := agentClient.ChatCompletionsWithContent(agentCtx, chatParts)
 			if err != nil {
-				_logger.Errorf("agent API error: %v", err)
+				slog.Error(logger.LogFormatter("agent API error: %v", err))
 				return
 			}
 			replyContent = chatResp.GetContent()
@@ -294,12 +295,12 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 		} else {
 			openParts, err := processMessageContentPartsToOpenResponsesContentParts(app1Ctx, contentParts, feishuClient, messageID, tenantToken)
 			if err != nil {
-				_logger.Errorf("failed to process content parts: %v", err)
+				slog.Error(logger.LogFormatter("failed to process content parts: %v", err))
 				return
 			}
 			openResp, err := agentClient.OpenResponsesWithContent(agentCtx, openParts)
 			if err != nil {
-				_logger.Errorf("agent API error: %v", err)
+				slog.Error(logger.LogFormatter("agent API error: %v", err))
 				return
 			}
 			replyContent = openResp.GetContent()
@@ -307,7 +308,7 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 		}
 
 		if replyContent == "" && filePath == "" {
-			_logger.Errorf("empty agent response")
+			slog.Error(logger.LogFormatter("empty agent response"))
 			return
 		}
 
@@ -316,24 +317,24 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 
 		accessToken, err := feishuClient.GetAppAccessToken(app2Ctx)
 		if err != nil {
-			_logger.Errorf("failed to get access token: %v", err)
+			slog.Error(logger.LogFormatter("failed to get access token: %v", err))
 			return
 		}
 
 		if filePath != "" {
-			_logger.Debugf("[processMessageAsync] sending image response: url=%s", filePath)
+			slog.Debug(logger.LogFormatter("[processMessageAsync] sending image response: url=%s", filePath))
 			if err := feishuClient.SendFileMessage(app2Ctx, accessToken, messageID, filePath); err != nil {
-				_logger.Errorf("failed to send image reply: %v, falling back to text", err)
+				slog.Error(logger.LogFormatter("failed to send image reply: %v, falling back to text", err))
 			}
 		}
 		if replyContent != "" {
 			if err := feishuClient.SendTextMessage(app2Ctx, accessToken, messageID, replyContent); err != nil {
-				_logger.Errorf("failed to send reply: %v", err)
+				slog.Error(logger.LogFormatter("failed to send reply: %v", err))
 				return
 			}
 		}
 
-		_logger.Infof("async message processed successfully: message_id=%s", messageID)
+		slog.Info(logger.LogFormatter("async message processed successfully: message_id=%s", messageID))
 	}()
 }
 
@@ -359,7 +360,7 @@ func processMessageContentPartsToChatCompletionsContentParts(ctx context.Context
 			imageKey := part.Key
 			imageData, err := feishuClient.DownloadMessageResource(ctx, tenantToken, messageID, imageKey)
 			if err != nil {
-				_logger.Errorf("failed to download feishu image: %v", err)
+				slog.Error(logger.LogFormatter("failed to download feishu image: %v", err))
 				continue
 			}
 			base64Data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageData)
@@ -386,7 +387,7 @@ func processMessageContentPartsToOpenResponsesContentParts(ctx context.Context, 
 			imageKey := part.Key
 			imageData, err := feishuClient.DownloadMessageResource(ctx, tenantToken, messageID, imageKey)
 			if err != nil {
-				_logger.Errorf("failed to download feishu image: %v", err)
+				slog.Error(logger.LogFormatter("failed to download feishu image: %v", err))
 				continue
 			}
 			base64Data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageData)

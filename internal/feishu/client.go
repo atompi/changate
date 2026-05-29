@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"time"
 
-	_logger "github.com/atompi/changate/pkg/logger"
+	"github.com/atompi/changate/pkg/logger"
 	"github.com/atompi/changate/pkg/retry"
 )
 
@@ -64,7 +65,7 @@ func (c *Client) ReplyMessage(ctx context.Context, accessToken, messageID, msgTy
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	_logger.Debugf("[feishu reply] url=%s body=%s", url, string(jsonBody))
+	slog.Debug(logger.LogFormatter("[feishu reply] url=%s body=%s", url, string(jsonBody)))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
@@ -79,7 +80,7 @@ func (c *Client) ReplyMessage(ctx context.Context, accessToken, messageID, msgTy
 		MaxRetries: 2,
 		BaseDelay:  100 * time.Millisecond,
 		BeforeRetry: func(attempt int, delay time.Duration) {
-			_logger.Warnf("[feishu reply] retrying in %v (attempt %d/3)", delay, attempt+1)
+			slog.Warn(logger.LogFormatter("[feishu reply] retrying in %v (attempt %d/3)", delay, attempt+1))
 			time.Sleep(delay)
 		},
 	}, func() error {
@@ -197,7 +198,7 @@ func (c *Client) GetAppAccessToken(ctx context.Context) (string, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		_logger.Errorf("[feishu] GetAppAccessToken request failed: %v", err)
+		slog.Error(logger.LogFormatter("[feishu] GetAppAccessToken request failed: %v", err))
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -239,7 +240,7 @@ func (c *Client) GetTenantAccessToken(ctx context.Context) (string, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		_logger.Errorf("[feishu] GetTenantAccessToken request failed: %v", err)
+		slog.Error(logger.LogFormatter("[feishu] GetTenantAccessToken request failed: %v", err))
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()

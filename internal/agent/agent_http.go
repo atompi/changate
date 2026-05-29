@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -88,7 +89,7 @@ func (c *agentHTTPClient) OpenResponses(ctx context.Context, messages []model.Me
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	logger.Debugf("[responses] response body: %s", string(body))
+	slog.Debug(logger.LogFormatter("[responses] response body: %s", string(body)))
 
 	if httpResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("responses API error: status=%d, body=%s", httpResp.StatusCode, string(body))
@@ -127,7 +128,7 @@ func (c *agentHTTPClient) ChatCompletions(ctx context.Context, messages []model.
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	logger.Debugf("[chatcompletions] response body: %s", string(body))
+	slog.Debug(logger.LogFormatter("[chatcompletions] response body: %s", string(body)))
 
 	if httpResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("chat completions API error: status=%d, body=%s", httpResp.StatusCode, string(body))
@@ -154,7 +155,7 @@ func (c *agentHTTPClient) ChatCompletionsWithContent(ctx context.Context, conten
 }
 
 func (c *agentHTTPClient) doRequest(ctx context.Context, body []byte) (*http.Response, error) {
-	logger.Debugf("[%s] request body: %s", c.builder.getAPIType(), string(body))
+	slog.Debug(logger.LogFormatter("[%s] request body: %s", c.builder.getAPIType(), string(body)))
 
 	url := c.baseURL + c.apiPath
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -176,7 +177,7 @@ func (c *agentHTTPClient) doRequestWithRetry(ctx context.Context, body []byte) (
 		MaxRetries:  c.maxRetries,
 		BaseDelay:   c.retryBaseDelay,
 		BeforeRetry: func(attempt int, delay time.Duration) {
-			logger.Warnf("[%s] retrying request (attempt %d, backoff %v)", c.builder.getAPIType(), attempt, delay)
+			slog.Warn(logger.LogFormatter("[%s] retrying request (attempt %d, backoff %v)", c.builder.getAPIType(), attempt, delay))
 		},
 	}, func() error {
 		resp, err := c.doRequest(ctx, body)
