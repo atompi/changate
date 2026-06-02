@@ -48,62 +48,25 @@ type SenderInfo struct {
 	TenantKey  string   `json:"tenant_key"`
 }
 
-// SenderID contains the user's ID information.
+// SenderID identifies the message sender.
 type SenderID struct {
-	UnionID string `json:"union_id"`
-	UserID  string `json:"user_id"`
-	OpenID  string `json:"open_id"`
+	UnionID string `json:"union_id,omitempty"`
+	UserID  string `json:"user_id,omitempty"`
+	OpenID  string `json:"open_id,omitempty"`
 }
 
-// MessageInfo contains details about the message.
+// MessageInfo contains the message content and metadata.
 type MessageInfo struct {
-	MessageID   string    `json:"message_id"`
-	RootID      string    `json:"root_id"`
-	ParentID    string    `json:"parent_id"`
-	CreateTime  string    `json:"create_time"`
-	ChatID      string    `json:"chat_id"`
-	ChatType    string    `json:"chat_type"`
-	MessageType string    `json:"message_type"`
-	Content     string    `json:"content"`
-	Mentions    []Mention `json:"mentions"`
+	MessageID   string `json:"message_id"`
+	ChatID      string `json:"chat_id"`
+	ChatType    string `json:"chat_type"`
+	MessageType string `json:"message_type"`
+	Content     string `json:"content"`
 }
 
-// Mention represents a user mentioned in a message.
-type Mention struct {
-	Key       string   `json:"key"`
-	ID        SenderID `json:"id"`
-	Name      string   `json:"name"`
-	TenantKey string   `json:"tenant_key"`
-}
-
-// TextContent represents a simple text message content.
 type TextContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
-}
-
-// ContentPart represents a content block in a multimodal message.
-type MessageContentPart struct {
-	Type     string
-	Text     string
-	Key      string
-	ImageURL string
-}
-
-type ChatCompletionsImageURL struct {
-	URL string `json:"url,omitempty"`
-}
-
-type ChatCompletionsContentPart struct {
-	Type     string                   `json:"type"`
-	Text     string                   `json:"text,omitempty"`
-	ImageURL *ChatCompletionsImageURL `json:"image_url,omitempty"`
-}
-
-type OpenResponsesContentPart struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
 }
 
 // ParseMessageContent parses message content into content parts based on message type.
@@ -136,9 +99,8 @@ func ParseMessageContent(content string, messageType string) ([]MessageContentPa
 			return nil, fmt.Errorf("empty image_key in image message")
 		}
 		return []MessageContentPart{{
-			Type:     "input_image",
-			Key:      img.ImageKey,
-			ImageURL: img.ImageKey,
+			Type: "input_image",
+			Key:  img.ImageKey,
 		}}, nil
 
 	case "post":
@@ -173,9 +135,8 @@ func ParseMessageContent(content string, messageType string) ([]MessageContentPa
 					imageKey, ok := keyVal.(string)
 					if ok && imageKey != "" {
 						parts = append(parts, MessageContentPart{
-							Type:     "input_image",
-							Key:      imageKey,
-							ImageURL: imageKey,
+							Type: "input_image",
+							Key:  imageKey,
 						})
 					}
 				case "text":

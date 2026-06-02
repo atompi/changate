@@ -35,8 +35,12 @@ config/
 | 配置验证 | `config.go:109-150` | validateConfig设置默认值 |
 
 ## CONVENTIONS (THIS PACKAGE)
-- 使用 `mapstructure:` 标签 (非json:)
-- 默认值在 `validateConfig()` 中设置，不在struct tag
+- 根 Config 使用 `mapstructure:` 标签 (从 Viper/YAML 加载)
+- `AgentConfig`/`MCPConfig`/`AppConfig`/`UserConfig` 使用 `json:` 标签 (从 ETCD 加载)
+- 默认值在 `validateConfig()` 中设置，不在 struct tag
 - ETCD路径: `/changate/<app_name>` 和 `/changate/<app_name>/<user_id>`
 - Viper配置绑定使用 `SetEnvKeyReplacer(strings.NewReplacer(".", "_"))`
 - AgentConfig.Tools: MCP工具列表，token从AgentConfig.Token共享
+- AgentConfig.ToolChoice: 透传给 Agent API (`tool_choice` 字段)
+- AgentConfig 字段: Type/BaseURL/APIPath/Timeout/Model/Token/User/MaxRetries/RetryBaseDelay/SystemPrompt/Tools/ToolChoice
+- HTTP timeout 默认来自 agent 包的 `defaultHTTPTimeout` (120s)，与此处无关

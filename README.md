@@ -47,7 +47,8 @@ changate/
 ├── internal/
 │   ├── agent/
 │   │   ├── client.go             # Client interface + NewClient factory
-│   │   └── agent_http.go         # Unified HTTP client + builders
+│   │   ├── agent_http.go         # Unified HTTP client + builders
+│   │   └── agent_test.go         # Unit tests
 │   ├── config/
 │   │   ├── config.go              # Config structs + Load function
 │   │   └── etcd_loader.go        # ETCD config loader
@@ -57,10 +58,12 @@ changate/
 │   │   └── client.go              # Feishu API client
 │   ├── handler/
 │   │   ├── callback.go            # Callback handling logic
-│   │   └── agent_cache.go         # Agent client cache
+│   │   ├── agent_cache.go         # LRU+TTL Agent client cache
+│   │   └── agent_cache_test.go    # Cache tests
 │   ├── model/
 │   │   ├── agent.go               # Agent response models
-│   │   └── event.go               # Event data models
+│   │   ├── event.go               # Event data models
+│   │   └── model_test.go          # Model tests
 │   └── router/
 │       └── router.go             # Gin router setup
 └── pkg/
@@ -126,26 +129,27 @@ etcd:
   "feishu_base_url": "https://open.feishu.cn",
   "max_concurrent": 100,
   "timeout": 120,
-  "agent": {
-    "type": "ChatCompletions",
-    "base_url": "https://litellm-proxy.example.com",
-    "api_path": "/v1/chat/completions",
-    "timeout": 3600,
-    "max_retries": 3,
-    "retry_base_delay": "100ms",
-    "model": "sf/Qwen/Qwen3-30B-A3B",
-    "token": "sk-xxxxxxxx",
-    "user": "default",
-    "system_prompt": "",
-    "tools": [
-      {
-        "type": "mcp",
-        "server_url": "litellm_proxy/mcp/wiki_mcp",
-        "server_label": "wiki_search",
-        "require_approval": "never"
-      }
-    ]
-  }
+    "agent": {
+      "type": "ChatCompletions",
+      "base_url": "https://litellm-proxy.example.com",
+      "api_path": "/v1/chat/completions",
+      "timeout": 120,
+      "max_retries": 3,
+      "retry_base_delay": "100ms",
+      "model": "sf/Qwen/Qwen3-30B-A3B",
+      "token": "sk-xxxxxxxx",
+      "user": "default",
+      "system_prompt": "",
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "type": "mcp",
+          "server_url": "litellm_proxy/mcp/wiki_mcp",
+          "server_label": "wiki_search",
+          "require_approval": "never"
+        }
+      ]
+    }
 }
 ```
 
@@ -234,7 +238,7 @@ Returns `{"status": "ok"}`.
     }
   ],
   "user": "user-identifier",
-  "stream": false
+  "tool_choice": "auto"
 }
 ```
 
@@ -258,7 +262,6 @@ Returns `{"status": "ok"}`.
     }
   ],
   "user": "user-identifier",
-  "stream": false,
   "tool_choice": "required"
 }
 ```

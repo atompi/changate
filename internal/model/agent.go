@@ -2,7 +2,6 @@ package model
 
 import (
 	"strings"
-	"unicode"
 )
 
 type Message struct {
@@ -15,10 +14,31 @@ type Content struct {
 	Text string `json:"text"`
 }
 
-type ContentPart struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
+// MessageContentPart is the gateway-internal representation of a Feishu message part.
+// Type discriminates the payload: "input_text" → Text, "input_image" → ImageData.
+type MessageContentPart struct {
+	Type      string
+	Text      string
+	Key       string
+	ImageData string
+}
+
+type ChatCompletionsImageURL struct {
+	URL string `json:"url,omitempty"`
+}
+
+type ChatCompletionsContentPart struct {
+	Type     string                   `json:"type"`
+	Text     string                   `json:"text,omitempty"`
+	ImageURL *ChatCompletionsImageURL `json:"image_url,omitempty"`
+}
+
+// OpenResponsesContentPart mirrors the OpenResponses API request shape.
+// ImageData is a "data:image/...;base64,..." URL (same wire format as ChatCompletions).
+type OpenResponsesContentPart struct {
+	Type      string `json:"type"`
+	Text      string `json:"text,omitempty"`
+	ImageData string `json:"image_url,omitempty"`
 }
 
 type OpenResponsesResponse struct {
@@ -31,25 +51,24 @@ type OpenResponsesResponse struct {
 }
 
 type Output struct {
-	Type      string    `json:"type"`
-	Role      string    `json:"role"`
-	Content   []Content `json:"content"`
+	Type    string    `json:"type"`
+	Role    string    `json:"role"`
+	Content []Content `json:"content"`
 }
 
 type Choice struct {
 	Index        int     `json:"index"`
 	Message      Message `json:"message"`
-	FinishReason string `json:"finish_reason"`
+	FinishReason string  `json:"finish_reason"`
 }
 
 type ChatCompletionsResponse struct {
-	ID              string   `json:"id"`
-	Object          string   `json:"object"`
-	Created         int64    `json:"created"`
-	Model           string   `json:"model"`
-	Choices         []Choice `json:"choices"`
-	Usage           Usage    `json:"usage"`
-	MaxOutputTokens int      `json:"max_output_tokens"`
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
 }
 
 type Usage struct {
@@ -76,23 +95,7 @@ func (r *OpenResponsesResponse) GetContent() string {
 }
 
 func (r *OpenResponsesResponse) GetFilePath() string {
-	replyText := r.GetContent()
-	if replyText == "" {
-		return ""
-	}
-	const mediaPrefix = "MEDIA:"
-	if strings.Contains(replyText, mediaPrefix) {
-		idx := strings.Index(replyText, mediaPrefix)
-		pathStart := idx + len(mediaPrefix)
-		pathEnd := strings.IndexFunc(replyText[pathStart:], unicode.IsSpace)
-		if pathEnd == -1 {
-			pathEnd = len(replyText)
-		} else {
-			pathEnd += pathStart
-		}
-		return replyText[pathStart:pathEnd]
-	}
-	return ""
+	return extractMediaPath(r.GetContent(), " \t\n")
 }
 
 func (r *ChatCompletionsResponse) GetContent() string {
@@ -112,23 +115,28 @@ func (r *ChatCompletionsResponse) GetContent() string {
 }
 
 func (r *ChatCompletionsResponse) GetFilePath() string {
-	replyText := r.GetContent()
+	return extractMediaPath(r.GetContent(), "\n")
+}
+
+func extractMediaPath(replyText, separators string) string {
 	if replyText == "" {
 		return ""
 	}
 	const mediaPrefix = "MEDIA:"
-	if strings.Contains(replyText, mediaPrefix) {
-		idx := strings.Index(replyText, mediaPrefix)
-		pathStart := idx + len(mediaPrefix)
-		pathEnd := strings.Index(replyText[pathStart:], "\n")
-		if pathEnd == -1 {
-			pathEnd = len(replyText)
-		} else {
-			pathEnd += pathStart
-		}
-		return replyText[pathStart:pathEnd]
+	idx := strings.Index(replyText, mediaPrefix)
+	if idx == -1 {
+		return ""
 	}
-	return ""
+	pathStart := idx + len(mediaPrefix)
+	pathEnd := -1
+	for i, r := range replyText[pathStart:] {
+		if strings.ContainsRune(separators, r) {
+			pathEnd = pathStart + i
+			break
+		}
+	}
+	if pathEnd == -1 {
+		pathEnd = len(replyText)
+	}
+	return replyText[pathStart:pathEnd]
 }
-
-

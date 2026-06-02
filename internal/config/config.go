@@ -52,6 +52,7 @@ type AgentConfig struct {
 	RetryBaseDelay time.Duration `json:"retry_base_delay"`
 	SystemPrompt   string        `json:"system_prompt"`
 	Tools          []MCPConfig   `json:"tools"`
+	ToolChoice     string        `json:"tool_choice"`
 }
 
 type MCPConfig struct {

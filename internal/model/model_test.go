@@ -122,11 +122,11 @@ func TestParseMessageContent_FeishuRichText_ImageOnly(t *testing.T) {
 	if parts[0].Type != "input_image" {
 		t.Errorf("parts[0].Type = %q, want %q", parts[0].Type, "input_image")
 	}
-	if parts[0].ImageURL == "" {
-		t.Fatal("parts[0].ImageURL is empty")
+	if parts[0].Key == "" {
+		t.Fatal("parts[0].Key is empty")
 	}
-	if parts[0].ImageURL != "img_v3_0211j_ee5508f3-30cb-444c-bf23-3c0956933ffg" {
-		t.Errorf("parts[0].ImageURL = %q, want %q", parts[0].ImageURL, "img_v3_0211j_ee5508f3-30cb-444c-bf23-3c0956933ffg")
+	if parts[0].Key != "img_v3_0211j_ee5508f3-30cb-444c-bf23-3c0956933ffg" {
+		t.Errorf("parts[0].Key = %q, want %q", parts[0].Key, "img_v3_0211j_ee5508f3-30cb-444c-bf23-3c0956933ffg")
 	}
 }
 
@@ -161,8 +161,8 @@ func TestParseMessageContent_FeishuRichText_ImageAndText(t *testing.T) {
 	if parts[0].Type != "input_image" {
 		t.Errorf("parts[0].Type = %q, want %q", parts[0].Type, "input_image")
 	}
-	if parts[0].ImageURL == "" || parts[0].ImageURL != "img_v3_0211j_ee5508f3-30cb-444c-bf23-3c0956933ffg" {
-		t.Errorf("parts[0].ImageURL = %v, want ...", parts[0].ImageURL)
+	if parts[0].Key == "" || parts[0].Key != "img_v3_0211j_ee5508f3-30cb-444c-bf23-3c0956933ffg" {
+		t.Errorf("parts[0].Key = %v, want ...", parts[0].Key)
 	}
 	if parts[1].Type != "input_text" {
 		t.Errorf("parts[1].Type = %q, want %q", parts[1].Type, "input_text")
@@ -185,11 +185,11 @@ func TestParseMessageContent_FeishuImageMessage(t *testing.T) {
 	if parts[0].Type != "input_image" {
 		t.Errorf("parts[0].Type = %q, want %q", parts[0].Type, "input_image")
 	}
-	if parts[0].ImageURL == "" {
-		t.Fatal("parts[0].ImageURL is empty")
+	if parts[0].Key == "" {
+		t.Fatal("parts[0].Key is empty")
 	}
-	if parts[0].ImageURL != "img_v3_0211j_98ce9879-d624-40ba-b871-d22d1d56e8ag" {
-		t.Errorf("parts[0].ImageURL = %q, want %q", parts[0].ImageURL, "img_v3_0211j_98ce9879-d624-40ba-b871-d22d1d56e8ag")
+	if parts[0].Key != "img_v3_0211j_98ce9879-d624-40ba-b871-d22d1d56e8ag" {
+		t.Errorf("parts[0].Key = %q, want %q", parts[0].Key, "img_v3_0211j_98ce9879-d624-40ba-b871-d22d1d56e8ag")
 	}
 }
 

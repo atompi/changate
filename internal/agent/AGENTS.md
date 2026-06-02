@@ -1,53 +1,69 @@
 # internal/agent
 
 ## OVERVIEW
-OpenResponses/ChatCompletions HTTP客户端封装，支持两种Agent类型。使用Builder模式统一处理请求构建和响应解析。
+OpenResponses/ChatCompletions HTTP 客户端封装，支持两种 Agent 类型。客户端在构造时绑定具体 builder 指针，无 `any`/`interface{}` 类型断言；共享调用管线通过顶级 `doCall[T any]` 泛型函数实现。
 
 ## STRUCTURE
 ```
 agent/
-├── client.go       # Client接口 + NewClient工厂
-├── agent_http.go   # 统一HTTP客户端 + requestBuilder实现
-└── client_test.go  # 测试
+├── client.go        # Client interface + Config struct + NewClient factory
+├── agent_http.go    # agentHTTPClient + 2 builders + doCall generic
+└── agent_test.go    # httptest + table-driven unit tests
 ```
 
 ## KEY SYMBOLS
 
 | Symbol | Type | Role |
 |--------|------|------|
-| `Client` | interface | Agent客户端接口 |
-| `NewClient` | func | 工厂函数，根据agentType创建对应客户端 |
-| `agentHTTPClient` | struct | 统一HTTP客户端实现 |
-| `requestBuilder` | interface | 请求构建器接口(responsesBuilder/chatCompletionsBuilder) |
-| `responsesBuilder` | struct | OpenResponses API请求构建器 |
-| `chatCompletionsBuilder` | struct | ChatCompletions API请求构建器 |
+| `Client` | interface | Agent 客户端接口（仅暴露 `*WithContent` 变体） |
+| `Config` | struct | NewClient 工厂参数 |
+| `NewClient` | func | 工厂函数，根据 `AgentType` 选择 builder；返回 error |
+| `TypeOpenResponses` / `TypeChatCompletions` | const | AgentType 取值常量 |
+| `agentHTTPClient` | struct | 统一 HTTP 客户端实现 |
+| `responsesBuilder` | struct | OpenResponses API builder |
+| `chatCompletionsBuilder` | struct | ChatCompletions API builder |
+| `doCall` | func | 顶级泛型函数 build→retry→read→parse 共享管线 |
 
 ## WHERE TO LOOK
 
 | Task | File | Notes |
 |------|------|-------|
-| 添加新Agent类型 | `client.go` | 修改NewClient工厂，添加新的builder |
-| 修改OpenResponses | `agent_http.go` | responsesBuilder.buildRequest/parseResponse |
-| 修改ChatCompletions | `agent_http.go` | chatCompletionsBuilder.buildRequest/parseResponse |
-| 修改HTTP客户端逻辑 | `agent_http.go` | agentHTTPClient.doRequest/doRequestWithRetry |
-| Agent响应解析 | `model.OpenResponsesResponse` / `model.ChatCompletionsResponse` | 在 internal/model/agent.go |
+| 添加新 Agent 类型 | `client.go` | 加常量 + 在 `newAgentHTTPClient` switch 中注册 builder |
+| 修改 OpenResponses 请求/响应 | `agent_http.go` | `responsesBuilder.buildRequest/parseResponse` |
+| 修改 ChatCompletions 请求/响应 | `agent_http.go` | `chatCompletionsBuilder.buildRequest/parseResponse` |
+| 修改 HTTP/重试逻辑 | `agent_http.go` | `agentHTTPClient.executeWithRetry/doHTTP` |
+| 共享调用管线 | `agent_http.go` | 顶级 `doCall[T any]` 函数 |
+| Agent 响应模型 | `internal/model/agent.go` | `OpenResponsesResponse` / `ChatCompletionsResponse` |
 
 ## CONVENTIONS (THIS PACKAGE)
-- AgentType为"ChatCompletions"时使用chatCompletionsBuilder，否则默认responsesBuilder
-- timeout默认3600s，maxRetries默认3，retryBaseDelay默认100ms
-- 响应格式: `GetContent()` 获取文本, `GetFilePath()` 获取文件路径(如果有MEDIA:前缀)
-- 使用原始HTTP请求，debug级别打印请求/响应体
-- MCP tools通过AgentConfig.Tools配置，token从AgentConfig.Token获取
-- 请求头添加"Bearer "前缀
-- 重试逻辑: 网络错误和5xx响应会指数退避重试
+- `AgentType` 为 `TypeChatCompletions` 时使用 chatCompletionsBuilder；`TypeOpenResponses` 或空字符串使用 responsesBuilder
+- 未知 `AgentType` → `NewClient` 返回 error
+- `BaseURL` 为空 → `NewClient` 返回 error（绝不静默回落）
+- 字段：baseURL, apiPath, maxRetries, retryBaseDelay（camelCase，匹配 config 风格）
+- HTTP 超时默认 120s（`defaultHTTPTimeout`），可通过 Config.Timeout 覆盖
+- 重试条件：网络错误 + 5xx + 429；4xx 不重试；指数退避
+- 响应体读取上限 `maxResponseBodyBytes = 10 MiB`（`readBoundedResponse`）
+- 日志中请求/响应体经 `truncateForLog` 截断到 2 KiB，避免 PII/大体积 base64
+- 错误消息只含 status code，不含完整响应体
+- MCP tools 通过 `Config.Tools`；`tool_choice` 通过 `Config.ToolChoice`
+- 共享 `requestBase` struct 消除 `responsesRequest` / `chatCompletionsRequest` 字段重复
+- 未知 content type：convertModelMessageToInput 返回 error（不再静默 `%v` 格式化）
+- 未知 content part type：slog.Warn 跳过（不静默丢弃）
+- function_call / tool_use 输出：slog.Info 标记（暂未传播到 Feishu）
+- Token usage 不一致：slog.Warn 标记
+- body 所有权：doHTTP 失败时关闭 body；executeWithRetry 在 retry 循环内显式关闭每次响应；成功响应传给调用者（caller 用 defer 关闭）
 
 ## BUILDER PATTERN
 
-统一客户端通过requestBuilder接口支持不同API格式：
-
 ```
 agentHTTPClient
-├── OpenResponses() → responsesBuilder.buildRequest() → JSON Input格式
-├── ChatCompletions() → chatCompletionsBuilder.buildRequest() → JSON Messages格式
-└── doRequestWithRetry() → pkg/retry.Do() with exponential backoff
+├── apiName:    "responses" | "chatcompletions"   (log label)
+├── apiPath:    /v1/responses | /v1/chat/completions  (default)
+├── responsesBld: *responsesBuilder    (set iff kind=Responses)
+├── chatBld:      *chatCompletionsBuilder (set iff kind=ChatCompletions)
+└── doCall[T any](c, ctx, msgs, parse) (shared build→retry→parse pipeline)
+    ├── responsesBuilder.parseResponse   (*OpenResponsesResponse)
+    └── chatCompletionsBuilder.parseResponse (*ChatCompletionsResponse)
 ```
+
+无类型断言：builder 指针在 ctor 阶段绑定，调用方直接传 `c.responsesBld.parseResponse` 或 `c.chatBld.parseResponse` 给泛型 `doCall`。

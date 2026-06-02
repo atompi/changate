@@ -261,8 +261,29 @@ func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppCon
 
 		key := cacheKey{appName: appName, userID: userID}
 		agentClient := h.agentCache.GetOrCreate(context.Background(), key, app, func(cfg *config.AppConfig) agent.Client {
-			return agent.NewClient(cfg.Agent.BaseURL, cfg.Agent.APIPath, cfg.Agent.Model, cfg.Agent.Token, userID, agentTimeout, agentMaxRetries, agentRetryBaseDelay, cfg.Agent.Type, cfg.Agent.SystemPrompt, cfg.Agent.Tools)
+			c, err := agent.NewClient(agent.Config{
+				BaseURL:        cfg.Agent.BaseURL,
+				APIPath:        cfg.Agent.APIPath,
+				Model:          cfg.Agent.Model,
+				Token:          cfg.Agent.Token,
+				User:           userID,
+				Timeout:        agentTimeout,
+				MaxRetries:     agentMaxRetries,
+				RetryBaseDelay: agentRetryBaseDelay,
+				AgentType:      cfg.Agent.Type,
+				SystemPrompt:   cfg.Agent.SystemPrompt,
+				Tools:          cfg.Agent.Tools,
+				ToolChoice:     cfg.Agent.ToolChoice,
+			})
+			if err != nil {
+				slog.Error(logger.LogFormatter("failed to create agent client: %v", err))
+				return nil
+			}
+			return c
 		})
+		if agentClient == nil {
+			return
+		}
 
 		app1Ctx, app1Cancel := context.WithTimeout(context.Background(), appTimeout)
 		defer app1Cancel()
@@ -357,17 +378,15 @@ func processMessageContentPartsToChatCompletionsContentParts(ctx context.Context
 				Text: part.Text,
 			})
 		} else if part.Type == "input_image" {
-			imageKey := part.Key
-			imageData, err := feishuClient.DownloadMessageResource(ctx, tenantToken, messageID, imageKey)
+			imageData, err := feishuClient.DownloadMessageResource(ctx, tenantToken, messageID, part.Key)
 			if err != nil {
 				slog.Error(logger.LogFormatter("failed to download feishu image: %v", err))
 				continue
 			}
-			base64Data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageData)
 			processedParts = append(processedParts, model.ChatCompletionsContentPart{
 				Type: "image_url",
 				ImageURL: &model.ChatCompletionsImageURL{
-					URL: base64Data,
+					URL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageData),
 				},
 			})
 		}
@@ -384,16 +403,14 @@ func processMessageContentPartsToOpenResponsesContentParts(ctx context.Context, 
 				Text: part.Text,
 			})
 		} else if part.Type == "input_image" {
-			imageKey := part.Key
-			imageData, err := feishuClient.DownloadMessageResource(ctx, tenantToken, messageID, imageKey)
+			imageData, err := feishuClient.DownloadMessageResource(ctx, tenantToken, messageID, part.Key)
 			if err != nil {
 				slog.Error(logger.LogFormatter("failed to download feishu image: %v", err))
 				continue
 			}
-			base64Data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageData)
 			processedParts = append(processedParts, model.OpenResponsesContentPart{
-				Type:     "input_image",
-				ImageURL: base64Data,
+				Type:      "input_image",
+				ImageData: "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageData),
 			})
 		}
 	}

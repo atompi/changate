@@ -27,9 +27,11 @@ flowchart LR
 - **会话保持**：支持配置 `user` 参数实现稳定的 Agent 会话
 - **图片处理**：支持下载飞书消息中的图片，base64 编码后发送给 Agent
 - **文件回复**：支持 Agent 返回本地文件路径 (`MEDIA:/path/to/file`)，上传至飞书发送
-- **Agent 客户端缓存**：LRU+TTL 缓存减少重复创建开销
+- **Agent 客户端缓存**：LRU+TTL 缓存减少重复创建开销（O(1) 驱逐）
 - **MCP Tools**：通过 `tools` 配置传递 MCP server 信息给 LiteLLM proxy
-- **重试机制**：指数退避重试，处理临时性网络故障和 5xx 错误
+- **tool_choice 控制**：支持透传 `tool_choice` 字段（`auto`/`required` 等）控制 LLM 工具选择
+- **重试机制**：指数退避重试，处理临时性网络故障、5xx 和 429 错误
+- **资源防护**：响应体读取上限 10 MiB，请求/响应体日志截断到 2 KiB
 
 ## 技术栈
 
@@ -46,26 +48,29 @@ changate/
 │       └── main.go               # 程序入口
 ├── internal/
 │   ├── agent/
-│   │   ├── client.go             # Client接口 + NewClient工厂
-│   │   └── agent_http.go         # 统一HTTP客户端 + 请求构建器
+│   │   ├── client.go             # Client 接口 + NewClient 工厂 + Config 结构体
+│   │   ├── agent_http.go         # 统一 HTTP 客户端 + 请求构建器 + 共享 doCall 泛型
+│   │   └── agent_test.go         # 单元测试
 │   ├── config/
-│   │   ├── config.go              # 配置结构体 + Load函数
-│   │   └── etcd_loader.go         # ETCD配置加载器
+│   │   ├── config.go              # 配置结构体 + Load 函数
+│   │   └── etcd_loader.go         # ETCD 配置加载器
 │   ├── etcd/
-│   │   └── client.go              # ETCD客户端
+│   │   └── client.go              # ETCD 客户端
 │   ├── feishu/
-│   │   └── client.go              # 飞书API客户端
+│   │   └── client.go              # 飞书 API 客户端
 │   ├── handler/
 │   │   ├── callback.go            # 回调处理逻辑
-│   │   └── agent_cache.go         # Agent客户端缓存
+│   │   ├── agent_cache.go         # LRU+TTL Agent 客户端缓存
+│   │   └── agent_cache_test.go    # 缓存单元测试
 │   ├── model/
-│   │   ├── agent.go                # Agent响应模型
-│   │   └── event.go               # 事件数据模型
+│   │   ├── agent.go                # Agent 响应模型
+│   │   ├── event.go               # 事件数据模型
+│   │   └── model_test.go          # 单元测试
 │   └── router/
-│       └── router.go              # Gin路由设置
+│       └── router.go              # Gin 路由设置
 └── pkg/
     ├── crypto/
-    │   └── aes.go                  # AES加解密工具
+    │   └── aes.go                  # AES 加解密工具
     ├── logger/
     │   └── logger.go              # 结构化日志
     └── retry/
@@ -132,13 +137,14 @@ etcd:
     "type": "ChatCompletions",
     "base_url": "https://litellm-proxy.example.com",
     "api_path": "/v1/chat/completions",
-    "timeout": 3600,
+    "timeout": 120,
     "max_retries": 3,
     "retry_base_delay": "100ms",
     "model": "sf/Qwen/Qwen3-30B-A3B",
     "token": "sk-xxxxxxxx",
     "user": "default",
     "system_prompt": "",
+    "tool_choice": "auto",
     "tools": [
       {
         "type": "mcp",
@@ -236,7 +242,7 @@ GET /health
     }
   ],
   "user": "用户标识",
-  "stream": false
+  "tool_choice": "auto"
 }
 ```
 
@@ -260,7 +266,6 @@ GET /health
     }
   ],
   "user": "用户标识",
-  "stream": false,
   "tool_choice": "required"
 }
 ```
@@ -297,11 +302,11 @@ GET /health
 
 ## 日志
 
-结构化日志，支持以下级别：
+结构化日志（基于 `log/slog`），支持以下级别：
 
-- `debug`：详细调试信息（包含请求/响应体）
+- `debug`：详细调试信息（包含请求/响应体，已截断到 2 KiB）
 - `info`：一般信息
-- `warn`：警告信息（包含重试尝试）
+- `warn`：警告信息（包含重试尝试、token usage 不一致、未知 content 类型）
 - `error`：错误信息
 
 ## 测试

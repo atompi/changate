@@ -15,9 +15,14 @@ type cacheKey struct {
 	userID  string
 }
 
+func (k cacheKey) String() string {
+	return k.appName + "|" + k.userID
+}
+
 type cachedClient struct {
 	client    agent.Client
 	expiresAt time.Time
+	key       cacheKey
 }
 
 type AgentCache struct {
@@ -41,16 +46,14 @@ func (c *AgentCache) Get(key cacheKey) agent.Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fullKey := key.appName + "|" + key.userID
-	elem, ok := c.cache[fullKey]
+	elem, ok := c.cache[key.String()]
 	if !ok {
 		return nil
 	}
 
 	cached := elem.Value.(*cachedClient)
 	if time.Now().After(cached.expiresAt) {
-		c.lru.Remove(elem)
-		delete(c.cache, fullKey)
+		c.removeElement(elem)
 		return nil
 	}
 
@@ -62,34 +65,26 @@ func (c *AgentCache) Set(key cacheKey, client agent.Client) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fullKey := key.appName + "|" + key.userID
-
-	if elem, ok := c.cache[fullKey]; ok {
+	if elem, ok := c.cache[key.String()]; ok {
+		cached := elem.Value.(*cachedClient)
+		cached.client = client
+		cached.expiresAt = time.Now().Add(c.ttl)
 		c.lru.MoveToFront(elem)
-		elem.Value.(*cachedClient).client = client
-		elem.Value.(*cachedClient).expiresAt = time.Now().Add(c.ttl)
 		return
 	}
 
 	if c.lru.Len() >= c.maxSize {
-		oldest := c.lru.Back()
-		if oldest != nil {
-			c.lru.Remove(oldest)
-			// Note: Simple deletion - in production you'd track the fullKey
-			for k := range c.cache {
-				if c.cache[k] == oldest {
-					delete(c.cache, k)
-					break
-				}
-			}
+		if oldest := c.lru.Back(); oldest != nil {
+			c.removeElement(oldest)
 		}
 	}
 
 	elem := c.lru.PushFront(&cachedClient{
 		client:    client,
 		expiresAt: time.Now().Add(c.ttl),
+		key:       key,
 	})
-	c.cache[fullKey] = elem
+	c.cache[key.String()] = elem
 }
 
 func (c *AgentCache) GetOrCreate(ctx context.Context, key cacheKey, cfg *config.AppConfig, factory func(*config.AppConfig) agent.Client) agent.Client {
@@ -100,4 +95,10 @@ func (c *AgentCache) GetOrCreate(ctx context.Context, key cacheKey, cfg *config.
 	client := factory(cfg)
 	c.Set(key, client)
 	return client
+}
+
+func (c *AgentCache) removeElement(elem *list.Element) {
+	cached := elem.Value.(*cachedClient)
+	delete(c.cache, cached.key.String())
+	c.lru.Remove(elem)
 }
