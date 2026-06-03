@@ -32,6 +32,7 @@ flowchart LR
 - **tool_choice 控制**：支持透传 `tool_choice` 字段（`auto`/`required` 等）控制 LLM 工具选择
 - **重试机制**：指数退避重试，处理临时性网络故障、5xx 和 429 错误
 - **资源防护**：响应体读取上限 10 MiB，请求/响应体日志截断到 2 KiB
+- **@提及门控**：群聊/频道/话题中只有被 @机器人 才回复；单聊正常回复。Bot 的 `@_user_xxx` 占位符在转发给 Agent 前会被自动剥离。Bot 身份通过 `Mention.type == "bot"` 且 `Mention.Name == app.bot_name` 识别（`bot_name` 在 ETCD 中按 app 配置）
 
 ## 技术栈
 
@@ -133,6 +134,7 @@ etcd:
   "feishu_base_url": "https://open.feishu.cn",
   "max_concurrent": 100,
   "timeout": 120,
+  "bot_name": "MyBot",
   "agent": {
     "type": "ChatCompletions",
     "base_url": "https://litellm-proxy.example.com",

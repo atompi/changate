@@ -47,3 +47,7 @@ model/
 - `Usage` 结构体：InputTokens/OutputTokens/TotalTokens
 - `MessageEvent.Sender.SenderID` 包含 UnionID/UserID/OpenID（仅 UserID 当前使用）
 - `URLVerificationRequest.Type == "url_verification"` 用于网关 URL 验证
+- `MessageInfo.Mentions` 包含飞书 @mention 列表；`MessageInfo.IsDM()` 判断是否单聊
+- Mention 结构：`Type` 在 `Mention` 顶层（`"user"` / `"bot"`），`MentionID` 仅含 `OpenID/UserID/UnionID`；bot 识别通过 `Mention.Type == "bot"` AND `Mention.Name == app.BotName`
+- Mention helpers (`mentions.go`): `IsBotMentioned(mentions, botName)`, `BotMentionKey(mentions, botName)`, `StripBotMention(text, key)` - 用于群聊@过滤和文本清理
+- 常量: `MentionTypeBot = "bot"`, `MentionTypeUser = "user"`

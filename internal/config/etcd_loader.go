@@ -44,6 +44,7 @@ func (l *EtcdConfigLoader) GetAppConfigOnly(ctx context.Context, appName string)
 		FeishuBaseURL: appCfg.FeishuBaseURL,
 		MaxConcurrent: appCfg.MaxConcurrent,
 		Timeout:       appCfg.Timeout * time.Second,
+		BotName:       appCfg.BotName,
 		Agent:         appCfg.Agent,
 	}, nil
 }
@@ -66,6 +67,7 @@ func (l *EtcdConfigLoader) GetResolvedConfig(ctx context.Context, appName, userI
 		FeishuBaseURL: appCfg.FeishuBaseURL,
 		MaxConcurrent: appCfg.MaxConcurrent,
 		Timeout:       appCfg.Timeout * time.Second,
+		BotName:       appCfg.BotName,
 		Agent:         appCfg.Agent,
 	}
 

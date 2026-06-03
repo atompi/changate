@@ -57,11 +57,39 @@ type SenderID struct {
 
 // MessageInfo contains the message content and metadata.
 type MessageInfo struct {
-	MessageID   string `json:"message_id"`
-	ChatID      string `json:"chat_id"`
-	ChatType    string `json:"chat_type"`
-	MessageType string `json:"message_type"`
-	Content     string `json:"content"`
+	MessageID   string    `json:"message_id"`
+	ChatID      string    `json:"chat_id"`
+	ChatType    string    `json:"chat_type"`
+	MessageType string    `json:"message_type"`
+	Content     string    `json:"content"`
+	Mentions    []Mention `json:"mentions,omitempty"`
+}
+
+// IsDM reports whether the message was sent in a 1-on-1 (direct) chat.
+func (m *MessageInfo) IsDM() bool {
+	return m.ChatType == "dm" || m.ChatType == "p2p"
+}
+
+// Mention is a Feishu @mention entry. The Key is the in-text placeholder
+// (e.g. "@_user_1") that should be stripped from text before forwarding to
+// the Agent; ID identifies the mentioned user or bot; Type discriminates
+// "user" vs "bot"; Name is the display name (matched against app.bot_name
+// to detect a mention of this app's bot).
+type Mention struct {
+	Key       string    `json:"key"`
+	ID        MentionID `json:"id"`
+	Name      string    `json:"name"`
+	TenantKey string    `json:"tenant_key"`
+	Type      string    `json:"mentioned_type,omitempty"`
+}
+
+// MentionID is the identity block inside a Mention. Feishu only populates
+// open_id/user_id/union_id here; the mention kind ("user" vs "bot") lives on
+// the parent Mention.Type, and the bot's display name lives on Mention.Name.
+type MentionID struct {
+	OpenID  string `json:"open_id,omitempty"`
+	UserID  string `json:"user_id,omitempty"`
+	UnionID string `json:"union_id,omitempty"`
 }
 
 type TextContent struct {

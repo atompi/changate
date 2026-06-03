@@ -30,6 +30,7 @@ flowchart LR
 - **Agent Client Caching**: LRU+TTL cache to reduce repeated creation overhead
 - **MCP Tools**: Pass MCP server information to LiteLLM proxy via `tools` configuration
 - **Retry Logic**: Exponential backoff retry for transient network failures and 5xx errors
+- **@Mention Gating**: In group/channel/thread chats, the bot only replies when explicitly @-mentioned. 1-on-1 chats reply to every message. The bot's `@_user_xxx` placeholder is stripped from text before forwarding to the Agent. The bot is identified by `Mention.type == "bot"` AND `Mention.Name == app.bot_name` (configured per app in ETCD).
 
 ## Tech Stack
 
@@ -129,7 +130,8 @@ etcd:
   "feishu_base_url": "https://open.feishu.cn",
   "max_concurrent": 100,
   "timeout": 120,
-    "agent": {
+  "bot_name": "MyBot",
+  "agent": {
       "type": "ChatCompletions",
       "base_url": "https://litellm-proxy.example.com",
       "api_path": "/v1/chat/completions",

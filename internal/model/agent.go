@@ -128,15 +128,15 @@ func extractMediaPath(replyText, separators string) string {
 		return ""
 	}
 	pathStart := idx + len(mediaPrefix)
-	pathEnd := -1
+	for pathStart < len(replyText) && strings.ContainsRune(separators, rune(replyText[pathStart])) {
+		pathStart++
+	}
+	pathEnd := len(replyText)
 	for i, r := range replyText[pathStart:] {
 		if strings.ContainsRune(separators, r) {
 			pathEnd = pathStart + i
 			break
 		}
 	}
-	if pathEnd == -1 {
-		pathEnd = len(replyText)
-	}
-	return replyText[pathStart:pathEnd]
+	return strings.TrimSpace(replyText[pathStart:pathEnd])
 }

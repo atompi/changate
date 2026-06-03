@@ -217,7 +217,20 @@ func (h *CallbackHandler) handleURLVerification(c *gin.Context, body []byte) {
 }
 
 func (h *CallbackHandler) handleMessageEvent(c *gin.Context, app *config.AppConfig, msgEvent model.MessageEvent, appName string, userID string) {
-	contentParts, err := model.ParseMessageContent(msgEvent.Message.Content, msgEvent.Message.MessageType)
+	if !shouldProcessMessage(msgEvent.Message, app.BotName) {
+		c.JSON(http.StatusOK, gin.H{"code": 0})
+		return
+	}
+
+	content := msgEvent.Message.Content
+	if msgEvent.Message.MessageType == "text" {
+		if key := model.BotMentionKey(msgEvent.Message.Mentions, app.BotName); key != "" {
+			content = model.StripBotMention(content, key)
+			slog.Info(logger.LogFormatter("[feishu callback] stripped bot mention %q from text in chat %s", key, msgEvent.Message.ChatID))
+		}
+	}
+
+	contentParts, err := model.ParseMessageContent(content, msgEvent.Message.MessageType)
 	if err != nil {
 		slog.Error(logger.LogFormatter("failed to parse message content: %v", err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse content"})
@@ -231,6 +244,22 @@ func (h *CallbackHandler) handleMessageEvent(c *gin.Context, app *config.AppConf
 		defer h.active.Add(-1)
 		h.processMessageAsync(appName, app, userID, contentParts, msgEvent.Message.MessageID)
 	}()
+}
+
+// shouldProcessMessage enforces the rule: in 1-on-1 chats, process every
+// message; in non-DM chats (group/channel/thread), only process when a
+// mention of type "bot" and Name matching botName is present in the
+// message. Returning false lets the handler ack with code=0 without
+// invoking the Agent.
+func shouldProcessMessage(msg model.MessageInfo, botName string) bool {
+	if msg.IsDM() {
+		return true
+	}
+	if model.IsBotMentioned(msg.Mentions, botName) {
+		return true
+	}
+	slog.Debug(logger.LogFormatter("[feishu callback] skipping non-mention in chat_type=%s chat_id=%s botName=%s mentions=%+v", msg.ChatType, msg.ChatID, botName, msg.Mentions))
+	return false
 }
 
 func (h *CallbackHandler) processMessageAsync(appName string, app *config.AppConfig, userID string, contentParts []model.MessageContentPart, messageID string) {

@@ -203,3 +203,75 @@ func TestParseMessageContent_UnsupportedType(t *testing.T) {
 		t.Errorf("error = %q, want %q", err.Error(), "unsupported message type: audio")
 	}
 }
+
+func TestExtractMediaPath_TrimsSurroundingWhitespace(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		separators string
+		want       string
+	}{
+		{
+			name:       "leading and trailing spaces (newline-only separators)",
+			input:      "prefix MEDIA:  /tmp/file.png  \nsuffix",
+			separators: "\n",
+			want:       "/tmp/file.png",
+		},
+		{
+			name:       "leading and trailing tabs and newlines",
+			input:      "MEDIA:\t\n/path/to/file.png\t\n",
+			separators: " \t\n",
+			want:       "/path/to/file.png",
+		},
+		{
+			name:       "no surrounding whitespace unchanged",
+			input:      "MEDIA:/tmp/file.png",
+			separators: " \t\n",
+			want:       "/tmp/file.png",
+		},
+		{
+			name:       "only whitespace yields empty string",
+			input:      "MEDIA:   ",
+			separators: " \t\n",
+			want:       "",
+		},
+		{
+			name:       "chat completions newline separator still trims",
+			input:      "MEDIA:/tmp/x.png\n\n\n",
+			separators: "\n",
+			want:       "/tmp/x.png",
+		},
+		{
+			name:       "no MEDIA prefix returns empty",
+			input:      "no path here",
+			separators: " \t\n",
+			want:       "",
+		},
+		{
+			name:       "empty input returns empty",
+			input:      "",
+			separators: " \t\n",
+			want:       "",
+		},
+		{
+			name:       "path at end of text with trailing newline",
+			input:      "Response: MEDIA:/tmp/file.png\n",
+			separators: " \t\n",
+			want:       "/tmp/file.png",
+		},
+		{
+			name:       "stops at first separator inside path content",
+			input:      "MEDIA:/tmp/file.png garbage",
+			separators: " \t\n",
+			want:       "/tmp/file.png",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractMediaPath(tc.input, tc.separators)
+			if got != tc.want {
+				t.Errorf("extractMediaPath(%q, %q) = %q, want %q", tc.input, tc.separators, got, tc.want)
+			}
+		})
+	}
+}

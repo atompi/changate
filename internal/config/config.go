@@ -72,6 +72,7 @@ type AppConfig struct {
 	FeishuBaseURL string        `json:"feishu_base_url"`
 	MaxConcurrent int           `json:"max_concurrent"`
 	Timeout       time.Duration `json:"timeout"`
+	BotName       string        `json:"bot_name"`
 	Agent         AgentConfig   `json:"agent"`
 }
 

@@ -41,8 +41,11 @@ handler/
 - 回调立即返回 200 OK，避免飞书超时；实际处理在 goroutine 中
 - 异步处理使用 per-app semaphore 限制并发（来自 `app.MaxConcurrent`）
 - AgentClient 通过缓存获取，key = `{appName, userID}`
-- 图片消息需先从 Feishu 下载再 base64 编码后发送到 Agent
+- 图片消息需先从飞书下载再 base64 编码后发送到 Agent
 - `processMessageContentPartsTo*ContentParts` 函数：text 直接映射，image 需调用 `feishuClient.DownloadMessageResource` + base64
 - LRU 缓存：每条目记录 `key` 字段，驱逐时 O(1) 从 map 删除（避免遍历全表）
 - `WaitForCompletion` 轮询 `active` 原子计数器（10ms 间隔），用于 graceful shutdown
 - `handleMessageEvent` 立即 `c.JSON(200, {code:0})` 然后 async 处理；Feishu 重试由 Agent 端保证
+- **群聊@过滤**: `shouldProcessMessage` 在 `handleMessageEvent` 入口检查：单聊 (`chat_type == "dm" || "p2p"`) 总是处理；非单聊（group/channel/thread）只有 bot 被 @时处理（`Mention.Type == "bot"` 且 `Mention.Name == app.BotName`）
+- **文本清理**: 群聊中 bot 被 @时，`BotMentionKey` + `StripBotMention` 从文本中移除 bot 的 `@_user_xxx` 占位符，避免 agent 看到噪声
+- 被过滤的群消息仍返回 200 + `code:0` 确认飞书（避免飞书重试）
